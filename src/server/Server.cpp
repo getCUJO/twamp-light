@@ -166,16 +166,17 @@ void Server::handleTestPacket(ClientPacket *packet, msghdr sender_msg, size_t pa
 ReflectorPacket
 Server::craftReflectorPacket(ClientPacket *clientPacket, msghdr sender_msg, timespec *incoming_timestamp)
 {
-
+    Timestamp server_timestamp = {};
+    if (incoming_timestamp->tv_sec == 0 && incoming_timestamp->tv_nsec == 0) {
+        // If the kernel timestamp is not available, use the client receive time
+        server_timestamp = get_timestamp();
+    }
     ReflectorPacket packet = {};
     if (args.sync_time) {
-        Timestamp server_timestamp = {};
         server_timestamp.integer = TimeSynchronizer::LocalTimeToDatagramTS24(get_usec());
         server_timestamp.fractional = timeSynchronizer->GetMinDeltaTS24().ToUnsigned();
         packet.server_time_data = htonts(server_timestamp);
     } else {
-        Timestamp server_timestamp;
-        timespec_to_timestamp(incoming_timestamp, &server_timestamp);
         packet.server_time_data = htonts(server_timestamp);
     }
     packet.seq_number = clientPacket->seq_number;

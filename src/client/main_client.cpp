@@ -51,6 +51,9 @@ Args parse_args(int argc, char **argv)
                    args.mean_inter_packet_delay,
                    "The mean inter-packet delay in milliseconds.")
         ->default_str(std::to_string(args.mean_inter_packet_delay));
+    app.add_flag("--constant-inter-packet-delay",
+                   args.constant_inter_packet_delay,
+                   "The constant inter-packet delay in milliseconds. Overrides the default Poisson traffic pattern.");
     uint8_t tos = 0;
     auto opt_tos = app.add_option("-T, --tos", tos, "The TOS value (<256).")
                        ->check(CLI::Range(256))

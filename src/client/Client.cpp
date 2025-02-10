@@ -154,7 +154,12 @@ void Client::runSenderThread()
                                       (args.mean_inter_packet_delay * 1000)); // Lambda is 1.0/mean (in microseconds)
     while (args.num_samples == 0 || index < args.num_samples || (args.runtime != 0 && time(NULL) - this->start_time < args.runtime)) {
         size_t payload_len = *select_randomly(args.payload_lens.begin(), args.payload_lens.end(), args.seed);
-        int delay = std::max((double) std::min((double) d(gen), 10000000.0), 0.0);
+        uint32_t delay;
+        if (args.constant_inter_packet_delay) {
+            delay = args.mean_inter_packet_delay * 1000;
+        } else {
+            delay = std::max((double) std::min((double) d(gen), 10000000.0), 0.0);
+        }
         usleep(delay);
         try {
             Timestamp sent_time = sendPacket(index, payload_len);

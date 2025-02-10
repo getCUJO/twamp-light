@@ -34,6 +34,7 @@ struct Args {
     bool print_digest = false;
     bool print_RTT_only = false;
     bool print_lost_packets = false;
+    bool constant_inter_packet_delay = false;
     std::string print_format = "legacy";
     std::string json_output_file;
 };

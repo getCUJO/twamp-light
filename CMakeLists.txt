@@ -2,20 +2,27 @@ cmake_minimum_required(VERSION 3.0)
 project(twamp-light)
 
 set(CMAKE_CXX_STANDARD 11)
-set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -Wextra -Wall -Werror")
-set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -Wextra -Wall -Werror")
-set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -Wextra -Wall -O0 -g")
-set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -Wextra -Wall -O0 -g")
-# set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wno-psabi" )
-# set(CMAKE_CXX_FLAGS_RELEASE "-Werror -O2")
+set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -g -O0 -Wextra -Wall -Werror")
+set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -g -O0 -Wextra -Wall -Werror")
+set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -Wextra -Wall -O1")
+
 include(cmake/getversion.cmake)
 
 option(SYSTEMD_UNIT "Include Systemd unit in install" ON)
+option(STATIC_LIBSTDCPP "build with static libstdcpp" ON)
 option(USE_ASAN "Build with address-sanitizer" OFF)
 option(RUN_TESTS "Build and run tests" ON)
 option(USE_LEGACY_TIMESTAMP_IN_CLIENT "Build without NIC timestamping in the client" OFF)
 if (USE_LEGACY_TIMESTAMP_IN_CLIENT)
   add_definitions(-DKERNEL_TIMESTAMP_DISABLED_IN_CLIENT)
+endif ()
+
+
+if (STATIC_LIBSTDCPP)
+  set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -ffunction-sections -fdata-sections")
+  set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -ffunction-sections -fdata-sections")
+  set(CMAKE_EXE_LINKER_FLAGS_DEBUG "${CMAKE_EXE_LINKER_FLAGS_DEBUG} -static-libstdc++ -static-libgcc -Wl,--gc-sections")
+  set(CMAKE_EXE_LINKER_FLAGS_RELEASE "${CMAKE_EXE_LINKER_FLAGS_RELEASE} -static-libstdc++ -static-libgcc -Wl,--gc-sections")
 endif ()
 
 if (RUN_TESTS)

@@ -10,3 +10,7 @@ cmake-build-debug/
 build
 packages
 .vscode/
+.cache/
+
+#Coverity
+cov-int/

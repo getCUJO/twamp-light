@@ -1,14 +1,14 @@
-#include <iostream>
-#include <unistd.h>
 #include "CLI11.hpp"
 #include "Server.h"
+#include <iostream>
+#include <unistd.h>
 
-Args parse_args(int argc, char **argv)
+static auto parse_args(int argc, char **argv)
 {
-    Args args;
+    Args args{};
     uint8_t tos = 0;
     std::string title = "Twamp-Light implementation written by Domos. Version " + std::string(TWAMP_VERSION_TXT);
-    CLI::App app{title.c_str()};
+    CLI::App app{std::move(title)};
     app.option_defaults()->always_capture_default(true);
     app.add_option("-a, --local_address",
                    args.local_host,
@@ -24,13 +24,9 @@ Args parse_args(int argc, char **argv)
         ->default_str(std::to_string(args.timeout));
     app.add_option("--sep", args.sep, "The separator to use in the output.");
     app.add_option("--ip", args.ip_version, "The IP version to use.");
-    app.add_flag(
-        "--sync{true}",
-        args.sync_time,
-        "Disables time synchronization mechanism. Not RFC-compatible, so disable to make this work with other TWAMP implementations.");
-    auto opt_tos = app.add_option("-T, --tos", tos, "The TOS value (<256).")
-                       ->check(CLI::Range(256))
-                       ->default_str(std::to_string(args.snd_tos));
+    auto *opt_tos = app.add_option("-T, --tos", tos, "The TOS value (<256).")
+                        ->check(CLI::Range(256))
+                        ->default_str(std::to_string(args.snd_tos));
     try {
         app.parse(argc, argv);
     } catch (const CLI::ParseError &e) {
@@ -43,9 +39,20 @@ Args parse_args(int argc, char **argv)
     return args;
 }
 
-int main(int argc, char **argv)
+auto main(int argc, char **argv) -> int
 {
-    Args args = parse_args(argc, argv);
-    Server server = Server(args);
-    return server.listen();
+    try {
+        Args args = parse_args(argc, argv);
+        Server server = Server(args);
+        return server.listen();
+    } catch (const CLI::BadNameString &e) {
+        std::cerr << "Invalid argument: " << e.what() << std::endl;
+        return EXIT_FAILURE;
+    } catch (const std::runtime_error &e) {
+        std::cerr << "Runtime error: " << e.what() << std::endl;
+        return EXIT_FAILURE;
+    } catch (const std::exception &e) {
+        std::cerr << "Exception: " << e.what() << std::endl;
+        return EXIT_FAILURE;
+    }
 }

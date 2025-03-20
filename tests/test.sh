@@ -1,9 +1,9 @@
 #!/bin/bash
 set -e
-stdbuf -o0 ./twamp-light-server -n 10 -P 4200 &> server_output.txt &
+stdbuf -o0 ./twamp-light-server -n 10 -P 4200 &>server_output.txt &
 server_pid=$!
 sleep 1
-stdbuf -o0 ./twamp-light-client -i 10 -n 10 localhost:4200 &> client_output.txt &
+stdbuf -o0 ./twamp-light-client -i 10 -n 10 localhost:4200 &>client_output.txt &
 client_pid=$!
 wait $client_pid
 if pgrep $server_pid; then pkill $server_pid; fi
@@ -33,7 +33,6 @@ awk -F, 'NR>1 && $1 !~ /^[0-9]+$/ {print "Non-numeric Time value on line", NR; e
 
 # Use awk to check if the values in the PLEN field are within a specific range, excluding the header row
 awk -F, 'NR>1 && ($12 < 40 || $12 > 1500) {print "PLEN value out of range on line", NR; exit 1}' server_output.txt
-
 
 # Check if the client output is correct
 

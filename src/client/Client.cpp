@@ -758,8 +758,9 @@ void Client::printMetrics(const MetricData &data) const
 		<< args.sep << sync << args.sep
 		<< unsigned(data.packet.sender_ttl) << args.sep
 		<< unsigned(data.ipHeader.ttl) << args.sep
-		<< unsigned(data.packet.sender_tos) << args.sep << '-'
-		<< args.sep << unsigned(data.ipHeader.tos) << args.sep
+		<< unsigned(args.snd_tos) << args.sep
+		<< unsigned(data.packet.sender_tos) << args.sep
+		<< unsigned(data.ipHeader.tos) << args.sep
 		<< (double)data.rtt_delay_nanoseconds *
 			   NANOSECONDS_TO_MILLISECONDS // Nanoseconds to milliseconds
 		<< args.sep

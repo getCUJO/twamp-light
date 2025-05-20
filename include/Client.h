@@ -111,22 +111,20 @@ class Client {
     int collator_started = 0;
     int collator_finished = 0;
     bool header_printed = false;
-    sem_t observation_semaphore;
     pthread_mutex_t observation_list_mutex = PTHREAD_MUTEX_INITIALIZER;
-    struct observation_list *observation_list;
+    ObservationList observation_list = {};
     std::vector<struct addrinfo *> remote_address_info = {};
     struct addrinfo *local_address_info = {};
     struct sqa_stats *stats_RTT;
     struct sqa_stats *stats_internal;
     struct sqa_stats *stats_client_server;
     struct sqa_stats *stats_server_client;
-    struct RawDataList *raw_data_list;
+    RawDataList raw_data_list;
     uint64_t first_packet_sent_epoch_nanoseconds = 0;
     uint64_t last_packet_sent_epoch_nanoseconds = 0;
     uint64_t last_packet_received_epoch_nanoseconds = 0;
     Args args;
-    TimeSynchronizer *timeSynchronizer = new TimeSynchronizer();
-    ClientPacket craftSenderPacket(uint32_t idx);
+    static auto craftSenderPacket(uint32_t idx) -> ClientPacket;
     void printStat(const char *statName, sqa_stats *statType);
 
     void handleReflectorPacket(ReflectorPacket *reflectorPacket,

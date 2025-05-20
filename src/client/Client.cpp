@@ -19,12 +19,10 @@
 
 using Clock = std::chrono::system_clock;
 
-Client::Client(const Args &args)
+Client::Client(const Args &args) : start_time(time(nullptr)), raw_data_list(), args(args)
 {
-    this->args = args;
-    this->start_time = time(NULL);
     // Construct remote socket address
-    struct addrinfo hints {};
+    struct addrinfo hints{};
     memset(&hints, 0, sizeof(hints));
     if (args.ip_version == IPV4) {
         hints.ai_family = AF_INET;
@@ -70,7 +68,7 @@ Client::Client(const Args &args)
                 remote_address_info[0]->ai_protocol);
     if (fd == -1) {
         std::cerr << strerror(errno) << std::endl;
-        throw;
+        throw std::runtime_error("Failed to create socket: " + std::string(strerror(errno)));
     }
     // Setup the socket options, to be able to receive TTL and TOS
     set_socket_options(fd, HDR_TTL, args.timeout);
@@ -78,20 +76,29 @@ Client::Client(const Args &args)
     // Bind the socket to a local port
     if (bind(fd, local_address_info->ai_addr, local_address_info->ai_addrlen) == -1) {
         std::cerr << strerror(errno) << std::endl;
-        throw;
+        throw std::runtime_error("Failed to bind socket: " + std::string(strerror(errno)));
     }
-    // Initialize the sent_packet_list
-    observation_list = sent_packet_list_create();
     // Initialize the stats
     stats_RTT = sqa_stats_create();
+    if (stats_RTT == nullptr) {
+        std::cerr << "Failed to allocate memory for stats_RTT" << std::endl;
+        throw std::runtime_error("Failed to allocate memory for stats_RTT");
+    }
     stats_internal = sqa_stats_create();
+    if (stats_internal == nullptr) {
+        std::cerr << "Failed to allocate memory for stats_internal" << std::endl;
+        throw std::runtime_error("Failed to allocate memory for stats_internal");
+    }
     stats_client_server = sqa_stats_create();
+    if (stats_client_server == nullptr) {
+        std::cerr << "Failed to allocate memory for stats_client_server" << std::endl;
+        throw std::runtime_error("Failed to allocate memory for stats_client_server");
+    }
     stats_server_client = sqa_stats_create();
-    // init the raw data array
-    raw_data_list = new RawDataList();
-
-    // Initialize the semaphore
-    sem_init(&observation_semaphore, 0, 0);
+    if (stats_server_client == nullptr) {
+        std::cerr << "Failed to allocate memory for stats_server_client" << std::endl;
+        throw std::runtime_error("Failed to allocate memory for stats_server_client");
+    }
 }
 
 Client::~Client()
@@ -101,17 +108,13 @@ Client::~Client()
     sqa_stats_destroy(stats_client_server);
     sqa_stats_destroy(stats_server_client);
     for (auto &addrinfo : remote_address_info) {
-        if (addrinfo != NULL) {
+        if (addrinfo != nullptr) {
             freeaddrinfo(addrinfo);
         }
     }
-    if (local_address_info != NULL) {
+    if (local_address_info != nullptr) {
         freeaddrinfo(local_address_info);
     }
-    free(observation_list);
-    delete timeSynchronizer;
-    delete raw_data_list;
-    sem_destroy(&observation_semaphore);
 }
 
 std::string decode_observation_point(ObservationPoints observation_point)
@@ -152,7 +155,8 @@ void Client::runSenderThread()
     std::mt19937 gen(rd()); // Standard mersenne_twister_engine seeded with rd()
     std::exponential_distribution<> d(1.0 /
                                       (args.mean_inter_packet_delay * 1000)); // Lambda is 1.0/mean (in microseconds)
-    while (args.num_samples == 0 || index < args.num_samples || (args.runtime != 0 && time(NULL) - this->start_time < args.runtime)) {
+    while (args.num_samples == 0 || index < args.num_samples ||
+           (args.runtime != 0 && time(NULL) - this->start_time < args.runtime)) {
         size_t payload_len = *select_randomly(args.payload_lens.begin(), args.payload_lens.end(), args.seed);
         uint32_t delay;
         if (args.constant_inter_packet_delay) {
@@ -168,12 +172,13 @@ void Client::runSenderThread()
             }
             last_packet_sent_epoch_nanoseconds = timestamp_to_nsec(&sent_time);
             if (this->collator_started) {
-                struct qed_observation *obs =
-                make_qed_observation(ObservationPoints::CLIENT_SEND, timestamp_to_nsec(&sent_time), index, payload_len);
+                struct qed_observation *obs = make_qed_observation(ObservationPoints::CLIENT_SEND,
+                                                                   timestamp_to_nsec(&sent_time),
+                                                                   index,
+                                                                   payload_len);
                 enqueue_observation(obs);
             }
-        }
-        catch (const std::exception& e) { // catch error from sendPacket
+        } catch (const std::exception &e) { // catch error from sendPacket
             std::cerr << e.what() << std::endl;
         }
         index++;
@@ -187,10 +192,8 @@ void Client::runReceiverThread()
 {
     /* run forever if num_samples is 0, 
     otherwise run until all packets have been received (or timed out) */
-    while ((args.num_samples == 0 || 
-    this->sending_completed == 0 ||
-    (this->received_packets < this->sent_packets && time(NULL) - this->sending_completed < args.timeout))) 
-    {
+    while ((args.num_samples == 0 || this->sending_completed == 0 ||
+            (this->received_packets < this->sent_packets && time(NULL) - this->sending_completed < args.timeout))) {
         awaitAndHandleResponse();
     }
 }
@@ -465,13 +468,13 @@ bool Client::awaitAndHandleResponse()
     // Read incoming datagram
     char buffer[sizeof(ReflectorPacket)]; // We should only be receiving ReflectorPackets
     char control[2048];
-    struct sockaddr_in6 src_addr {};
+    struct sockaddr_in6 src_addr{};
 
     struct iovec iov;
     iov.iov_base = buffer;
     iov.iov_len = sizeof(buffer);
 
-    timespec incoming_timestamp = {0,0};
+    timespec incoming_timestamp = {0, 0};
     timespec *incoming_timestamp_ptr = &incoming_timestamp;
 
     struct msghdr incoming_msg = make_msghdr(&iov, 1, &src_addr, sizeof(src_addr), control, sizeof(control));
@@ -609,7 +612,8 @@ void Client::handleReflectorPacket(ReflectorPacket *reflectorPacket,
         incoming_timestamp_nanoseconds = timestamp_to_nsec(&client_receive_time);
     } else {
         // Convert timespec to timestamp
-        incoming_timestamp_nanoseconds = (uint64_t)incoming_timestamp->tv_sec * 1000000000 + incoming_timestamp->tv_nsec;
+        incoming_timestamp_nanoseconds =
+            (uint64_t) incoming_timestamp->tv_sec * 1000000000 + incoming_timestamp->tv_nsec;
     }
     last_packet_received_epoch_nanoseconds = incoming_timestamp_nanoseconds;
 
@@ -625,8 +629,10 @@ void Client::handleReflectorPacket(ReflectorPacket *reflectorPacket,
     this->last_received_packet_id = packet_id;
     this->received_packets += 1;
     if (this->collator_started) {
-        struct qed_observation *obs1 =
-            make_qed_observation(ObservationPoints::CLIENT_RECEIVE, incoming_timestamp_nanoseconds, packet_id, payload_len);
+        struct qed_observation *obs1 = make_qed_observation(ObservationPoints::CLIENT_RECEIVE,
+                                                            incoming_timestamp_nanoseconds,
+                                                            packet_id,
+                                                            payload_len);
         struct qed_observation *obs2 = make_qed_observation(ObservationPoints::SERVER_RECEIVE,
                                                             timestamp_to_nsec(&server_receive_time),
                                                             packet_id,
@@ -642,7 +648,11 @@ void Client::handleReflectorPacket(ReflectorPacket *reflectorPacket,
         enqueue_observation(obs1);
     }
     if (args.print_format == "legacy") {
-        printReflectorPacket(reflectorPacket, msghdr, payload_len, incoming_timestamp_nanoseconds, this->stats_client_server);
+        printReflectorPacket(reflectorPacket,
+                             msghdr,
+                             payload_len,
+                             incoming_timestamp_nanoseconds,
+                             this->stats_client_server);
     }
 }
 
@@ -679,10 +689,10 @@ void Client::printHeader()
                   << args.sep << "SndTOS" << args.sep << "FW_TOS" << args.sep << "SW_TOS" << args.sep << "RTT"
                   << args.sep << "IntD" << args.sep << "FWD" << args.sep << "BWD" << args.sep << "PLEN";
         if (args.print_lost_packets) {
-            std::cout  << args.sep << "SENT" << args.sep << "LOST";
+            std::cout << args.sep << "SENT" << args.sep << "LOST";
         }
-        std::cout  << "\n";
-        } else if (args.print_format == "raw") {
+        std::cout << "\n";
+    } else if (args.print_format == "raw") {
         std::cout << "packet_id" << args.sep << "payload_len" << args.sep << "client_send_epoch_nanoseconds" << args.sep
                   << "server_receive_epoch_nanoseconds" << args.sep << "server_send_epoch_nanoseconds" << args.sep
                   << "client_receive_epoch_nanoseconds"

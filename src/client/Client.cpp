@@ -32,7 +32,6 @@ using Clock = std::chrono::system_clock;
 
 Client::Client(const Args &args)
 	: start_time(time(nullptr))
-	, observation_semaphore()
 	, raw_data_list()
 	, args(args)
 {
@@ -132,9 +131,6 @@ Client::Client(const Args &args)
 		throw std::runtime_error(
 			"Failed to allocate memory for stats_server_client");
 	}
-
-	// Initialize the semaphore
-	sem_init(&observation_semaphore, 0, 0);
 }
 
 Client::~Client()
@@ -151,7 +147,6 @@ Client::~Client()
 	if (local_address_info != nullptr) {
 		freeaddrinfo(local_address_info);
 	}
-	sem_destroy(&observation_semaphore);
 }
 
 auto decode_observation_point(ObservationPoints observation_point)

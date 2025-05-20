@@ -240,7 +240,6 @@ class Client {
 	int collator_started = 0;
 	int collator_finished = 0;
 	bool header_printed = false;
-	sem_t observation_semaphore;
 	pthread_mutex_t observation_list_mutex = PTHREAD_MUTEX_INITIALIZER;
 	ObservationList observation_list = {};
 	std::vector<struct addrinfo *> remote_address_info = {};

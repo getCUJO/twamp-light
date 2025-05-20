@@ -722,15 +722,18 @@ void Client::printMetrics(const MetricData &data)
     std::cout << std::fixed << data.initial_send_time << args.sep << data.ip << args.sep << snd_sn << args.sep << rcv_sn
               << args.sep << data.sending_port << args.sep << data.receiving_port << args.sep << sync << args.sep
               << unsigned(data.packet.sender_ttl) << args.sep << unsigned(data.ipHeader.ttl) << args.sep
-              << unsigned(data.packet.sender_tos) << args.sep << '-' << args.sep << unsigned(data.ipHeader.tos)
-              << args.sep << (double) data.rtt_delay * 1e-6 // Nanoseconds to milliseconds
-              << args.sep << (double) data.internal_delay * 1e-6 << args.sep << (double) data.client_server_delay * 1e-6
-              << args.sep << (double) data.server_client_delay * 1e-6 << args.sep << data.payload_length;
+              << unsigned(args.snd_tos) << args.sep << unsigned(data.packet.sender_tos) << args.sep
+              << unsigned(data.ipHeader.tos) << args.sep
+              << (double) data.rtt_delay_nanoseconds * NANOSECONDS_TO_MILLISECONDS // Nanoseconds to milliseconds
+              << args.sep << (double) data.internal_delay_nanoseconds * NANOSECONDS_TO_MILLISECONDS << args.sep
+              << (double) data.client_server_delay_nanoseconds * NANOSECONDS_TO_MILLISECONDS << args.sep
+              << (double) data.server_client_delay_nanoseconds * NANOSECONDS_TO_MILLISECONDS << args.sep
+              << data.payload_length;
     if (args.print_lost_packets) {
         std::cout << args.sep << data.packets_sent << args.sep << data.packets_lost;
     }
     std::cout << "\n";
-    fflush(stdout);
+    (void) fflush(stdout);
 }
 
 void Client::print_lost_packet(uint32_t packet_id, uint64_t initial_send_time, uint16_t payload_len)

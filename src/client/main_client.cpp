@@ -1,24 +1,24 @@
 //
 // Created by vladim0105 on 12/15/21.
 //
-#include <unistd.h>
-#include <stdlib.h>
-#include <string.h>
-#include <stdio.h>
-#include <signal.h>
-#include <iostream>
-#include <thread>
 #include "Client.h"
 #include "CLI11.hpp"
+#include <csignal>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <iostream>
+#include <thread>
+#include <unistd.h>
 
-Args parse_args(int argc, char **argv)
+auto parse_args(int argc, char **argv) -> Args
 {
-	Args args;
+	Args args = {};
 	bool print_version = false;
 	std::string title =
 		"Twamp-Light implementation written by Domos. Version " +
 		std::string(TWAMP_VERSION_TXT);
-	CLI::App app{title.c_str()};
+	CLI::App app{title};
 	app.option_defaults()->always_capture_default(true);
 	app.add_option(
 		"-a, --local_address",
@@ -27,12 +27,14 @@ Args parse_args(int argc, char **argv)
 	app.add_option("-P, --local_port",
 		       args.local_port,
 		       "The port to set up the local socket on.");
+	constexpr auto MIN_PAYLOAD_LEN = 42;
+	constexpr auto MAX_PAYLOAD_LEN = 1473;
 	app.add_option(
 		   "-l, --payload_lens",
 		   args.payload_lens,
 		   "The payload length. Must be in range (42, 1473). Can be multiple values, in which case it will be sampled randomly.")
 		->default_str(vectorToString(args.payload_lens, " "))
-		->check(CLI::Range(42, 1473));
+		->check(CLI::Range(MIN_PAYLOAD_LEN, MAX_PAYLOAD_LEN));
 	app.add_option("-n, --num_samples",
 		       args.num_samples,
 		       "Number of samples to expect. Set to 0 for unlimited.");
@@ -68,22 +70,19 @@ Args parse_args(int argc, char **argv)
 		"--runtime",
 		args.runtime,
 		"Run for this number of seconds before terminating. This option overrides the -n (--num_samples) option.");
-	app.add_flag(
-		"--sync{true}",
-		args.sync_time,
-		"Disables time synchronization mechanism. Not RFC-compatible, so disable to make this work with other TWAMP implementations.");
 	app.add_option("-i, --mean_inter_packet_delay",
-		       args.mean_inter_packet_delay,
+		       args.mean_inter_packet_delay_ms,
 		       "The mean inter-packet delay in milliseconds.")
-		->default_str(std::to_string(args.mean_inter_packet_delay));
+		->default_str(std::to_string(args.mean_inter_packet_delay_ms));
 	app.add_flag(
 		"--constant-inter-packet-delay",
 		args.constant_inter_packet_delay,
 		"The constant inter-packet delay in milliseconds. Overrides the default Poisson traffic pattern.");
 	uint8_t tos = 0;
-	auto opt_tos = app.add_option("-T, --tos", tos, "The TOS value (<256).")
-			       ->check(CLI::Range(256))
-			       ->default_str(std::to_string(args.snd_tos));
+	auto *opt_tos =
+		app.add_option("-T, --tos", tos, "The TOS value (<256).")
+			->check(CLI::Range(256))
+			->default_str(std::to_string(args.snd_tos));
 	app.add_flag("-V{true}, --version{true}",
 		     print_version,
 		     "Print Version info");
@@ -94,7 +93,7 @@ Args parse_args(int argc, char **argv)
 		       "IPs and Ports in the format IP:Port")
 		->check([&args](const std::string &str) {
 			std::string ip;
-			uint16_t port;
+			uint16_t port = 0;
 			if (args.ip_version == IPV6) {
 				if (!parseIPv6Port(str, ip, port)) {
 					return "Address must be in the format IP:Port";
@@ -125,12 +124,12 @@ Args parse_args(int argc, char **argv)
 			  << std::string(QOO_GIT_DESCRIBE) << ") ";
 		std::cout << "t-digest-c (" << std::string(TDIGEST_GIT_DESCRIBE)
 			  << ")" << std::endl;
-		fflush(stdout);
+		(void)fflush(stdout);
 		std::exit(EXIT_SUCCESS);
 	} else { // i dont't know how to override addresses options required() modifier
 		if (ipPortStrs.empty()) {
 			std::cout << "Address must be in the format IP:Port\n";
-			fflush(stdout);
+			(void)fflush(stdout);
 			exit(EXIT_SUCCESS);
 		}
 	}
@@ -141,7 +140,7 @@ Args parse_args(int argc, char **argv)
 	return args;
 }
 
-int main(int argc, char **argv)
+auto main(int argc, char **argv) -> int
 {
 	Args args = parse_args(argc, argv);
 	Client client = Client(args);

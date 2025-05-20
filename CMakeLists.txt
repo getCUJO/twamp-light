@@ -1,11 +1,15 @@
 cmake_minimum_required(VERSION 3.0)
 project(twamp-light)
 
-set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -Wextra -Wall -Werror")
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -Wextra -Wall -Werror")
 set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -Wextra -Wall -O0 -g")
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -Wextra -Wall -O0 -g")
+# write a compile_commands.json file for clangd
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wno-psabi" )
 # set(CMAKE_CXX_FLAGS_RELEASE "-Werror -O2")
 include(cmake/getversion.cmake)
@@ -40,9 +44,6 @@ set(COMMON_SOURCES
         include/CLI11.hpp
         src/utils.cpp
         include/packets.h
-        src/TimeSync.cpp
-        include/TimeSync.h
-        include/Counter.h
         include/json.hpp
 )
 
@@ -86,6 +87,8 @@ if (BASH_PROGRAM)
                 COMMAND ${BASH_PROGRAM} ${CMAKE_CURRENT_SOURCE_DIR}/tests/valgrind_test.sh)
         add_test (NAME test_memory_ipv6 
                 COMMAND ${BASH_PROGRAM} ${CMAKE_CURRENT_SOURCE_DIR}/tests/valgrind_test_ipv6.sh)
+        add_test (NAME test_memory_collator 
+                COMMAND ${BASH_PROGRAM} ${CMAKE_CURRENT_SOURCE_DIR}/tests/valgrind_test_collator.sh)
 endif()
         
 install(TARGETS ${CLIENT_TARGET} ${SERVER_TARGET} 

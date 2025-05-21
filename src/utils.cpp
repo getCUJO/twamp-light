@@ -252,11 +252,9 @@ void set_socket_options(int socket, uint8_t ip_ttl, uint8_t timeout_secs)
 				    static_cast<void *>(&timeout),
 				    sizeof(struct timeval));
 		if (result != 0) {
-			if (result != 0) {
-				std::cerr
-					<< "[PROBLEM] Cannot set the timeout value for reception."
-					<< std::endl;
-			}
+			std::cerr
+				<< "[PROBLEM] Cannot set the timeout value for reception."
+				<< std::endl;
 		}
 	}
 
@@ -270,11 +268,8 @@ void set_socket_options(int socket, uint8_t ip_ttl, uint8_t timeout_secs)
 	result =
 		setsockopt(socket, IPPROTO_IP, IP_TTL, &ip_ttl, sizeof(ip_ttl));
 	if (result != 0) {
-		if (result != 0) {
-			std::cerr
-				<< "[PROBLEM] Cannot set the TTL value for emission."
-				<< std::endl;
-		}
+		std::cerr << "[PROBLEM] Cannot set the TTL value for emission."
+			  << std::endl;
 	}
 #else
 	fprintf(stderr,
@@ -285,11 +280,9 @@ void set_socket_options(int socket, uint8_t ip_ttl, uint8_t timeout_secs)
 #ifdef IP_RECVTTL
 	result = setsockopt(socket, IPPROTO_IP, IP_RECVTTL, &One, sizeof(One));
 	if (result != 0) {
-		if (result != 0) {
-			std::cerr
-				<< "[PROBLEM] Cannot set the socket option for TTL reception."
-				<< std::endl;
-		}
+		std::cerr
+			<< "[PROBLEM] Cannot set the socket option for TTL reception."
+			<< std::endl;
 	}
 #else
 	fprintf(stderr,
@@ -298,11 +291,8 @@ void set_socket_options(int socket, uint8_t ip_ttl, uint8_t timeout_secs)
 #ifdef IP_TOS
 	result = setsockopt(socket, IPPROTO_IP, IP_TOS, &One, sizeof(One));
 	if (result != 0) {
-		if (result != 0) {
-			std::cerr
-				<< "[PROBLEM] Cannot set the socket option for TOS."
-				<< std::endl;
-		}
+		std::cerr << "[PROBLEM] Cannot set the socket option for TOS."
+			  << std::endl;
 	}
 #else
 	fprintf(stderr,
@@ -312,11 +302,9 @@ void set_socket_options(int socket, uint8_t ip_ttl, uint8_t timeout_secs)
 #ifdef IP_RECVTOS
 	result = setsockopt(socket, IPPROTO_IP, IP_RECVTOS, &One, sizeof(One));
 	if (result != 0) {
-		if (result != 0) {
-			std::cerr
-				<< "[PROBLEM] Cannot set the socket option for TOS reception."
-				<< std::endl;
-		}
+		std::cerr
+			<< "[PROBLEM] Cannot set the socket option for TOS reception."
+			<< std::endl;
 	}
 #else
 	fprintf(stderr,
@@ -333,11 +321,8 @@ void set_socket_tos(int socket, uint8_t ip_tos)
 	result =
 		setsockopt(socket, IPPROTO_IP, IP_TOS, &ip_tos, sizeof(ip_tos));
 	if (result != 0) {
-		if (result != 0) {
-			std::cerr
-				<< "[PROBLEM] Cannot set the TOS value for emission."
-				<< std::endl;
-		}
+		std::cerr << "[PROBLEM] Cannot set the TOS value for emission."
+			  << std::endl;
 	}
 #else
 	fprintf(stderr,

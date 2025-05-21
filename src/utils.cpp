@@ -210,12 +210,12 @@ void set_socket_options(int socket, uint8_t ip_ttl, uint8_t timeout_secs)
     if (setsockopt(socket, SOL_SOCKET, SO_TIMESTAMPNS, &flags, sizeof(flags)) < 0)
         printf("ERROR: setsockopt SO_TIMESTAMPNS\n");
 
-        /* Set receive UDP message timeout value */
+    /* Set receive UDP message timeout value */
 #ifdef SO_RCVTIMEO
     if (timeout_secs != 0) {
-        result = setsockopt(socket, SOL_SOCKET, SO_RCVTIMEO, (char *) &timeout, sizeof(struct timeval));
+        result = setsockopt(socket, SOL_SOCKET, SO_RCVTIMEO, static_cast<void *>(&timeout), sizeof(struct timeval));
         if (result != 0) {
-            fprintf(stderr, "[PROBLEM] Cannot set the timeout value for reception.\n");
+            std::cerr << "[PROBLEM] Cannot set the timeout value for reception." << std::endl;
         }
     }
 
@@ -227,7 +227,7 @@ void set_socket_options(int socket, uint8_t ip_ttl, uint8_t timeout_secs)
 #ifdef IP_TTL
     result = setsockopt(socket, IPPROTO_IP, IP_TTL, &ip_ttl, sizeof(ip_ttl));
     if (result != 0) {
-        fprintf(stderr, "[PROBLEM] Cannot set the TTL value for emission.\n");
+        std::cerr << "[PROBLEM] Cannot set the TTL value for emission." << std::endl;
     }
 #else
     fprintf(stderr, "No way to set the TTL value for leaving packets on that platform.\n");
@@ -237,7 +237,7 @@ void set_socket_options(int socket, uint8_t ip_ttl, uint8_t timeout_secs)
 #ifdef IP_RECVTTL
     result = setsockopt(socket, IPPROTO_IP, IP_RECVTTL, &One, sizeof(One));
     if (result != 0) {
-        fprintf(stderr, "[PROBLEM] Cannot set the socket option for TTL reception.\n");
+        std::cerr << "[PROBLEM] Cannot set the socket option for TTL reception." << std::endl;
     }
 #else
     fprintf(stderr, "No way to ask for the TTL of incoming packets on that platform.\n");
@@ -245,7 +245,7 @@ void set_socket_options(int socket, uint8_t ip_ttl, uint8_t timeout_secs)
 #ifdef IP_TOS
     result = setsockopt(socket, IPPROTO_IP, IP_TOS, &One, sizeof(One));
     if (result != 0) {
-        fprintf(stderr, "[PROBLEM] Cannot set the socket option for TOS.\n");
+        std::cerr << "[PROBLEM] Cannot set the socket option for TOS." << std::endl;
     }
 #else
     fprintf(stderr, "No way to ask for the TOS of incoming packets on that platform.\n");
@@ -254,7 +254,7 @@ void set_socket_options(int socket, uint8_t ip_ttl, uint8_t timeout_secs)
 #ifdef IP_RECVTOS
     result = setsockopt(socket, IPPROTO_IP, IP_RECVTOS, &One, sizeof(One));
     if (result != 0) {
-        fprintf(stderr, "[PROBLEM] Cannot set the socket option for TOS reception.\n");
+        std::cerr << "[PROBLEM] Cannot set the socket option for TOS reception." << std::endl;
     }
 #else
     fprintf(stderr, "No way to ask for the TOS of incoming packets on that platform.\n");
@@ -269,7 +269,7 @@ void set_socket_tos(int socket, uint8_t ip_tos)
 #ifdef IP_TOS
     result = setsockopt(socket, IPPROTO_IP, IP_TOS, &ip_tos, sizeof(ip_tos));
     if (result != 0) {
-        fprintf(stderr, "[PROBLEM] Cannot set the TOS value for emission.\n");
+        std::cerr << "[PROBLEM] Cannot set the TOS value for emission." << std::endl;
     }
 #else
     fprintf(stderr, "No way to set the TOS value for leaving packets on that platform.\n");
@@ -316,7 +316,7 @@ bool parseIPPort(const std::string &input, std::string &ip, uint16_t &port)
 bool parseIPv6Port(const std::string &input, std::string &ip, uint16_t &port)
 {
     size_t lastColonPos = input.rfind(':');
-    
+
     if (lastColonPos != std::string::npos) {
         ip = input.substr(0, lastColonPos);
         std::string port_str = input.substr(lastColonPos + 1);

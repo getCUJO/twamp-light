@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0
 #
-# clang-format configuration file. Intended for clang-format >= 11.
+# clang-format configuration file.
 #
 # For more information, see:
 #
@@ -9,118 +9,113 @@
 #   https://clang.llvm.org/docs/ClangFormatStyleOptions.html
 #
 ---
-BasedOnStyle: LLVM
-UseTab: Never
-TabWidth: 4
-IndentWidth: 4
-SpaceAfterCStyleCast: true
-BreakBeforeBraces: Custom
-BraceWrapping:
-  AfterFunction: true
-IndentBracesIndentCaseLabels: true
-BreakStringLiterals: false
-
-
+AccessModifierOffset: -4
+AlignAfterOpenBracket: Align
+AlignConsecutiveAssignments: false
+AlignConsecutiveDeclarations: false
+AlignConsecutiveMacros: true
+AlignEscapedNewlines: Left
+AlignOperands: true
+AlignTrailingComments: false
+AllowAllParametersOfDeclarationOnNextLine: false
+AllowShortBlocksOnASingleLine: false
+AllowShortCaseLabelsOnASingleLine: false
+AllowShortFunctionsOnASingleLine: None
+AllowShortIfStatementsOnASingleLine: false
+AllowShortLoopsOnASingleLine: false
+AlwaysBreakAfterDefinitionReturnType: None
+AlwaysBreakAfterReturnType: None
+AlwaysBreakBeforeMultilineStrings: false
+AlwaysBreakTemplateDeclarations: false
 BinPackArguments: false
 BinPackParameters: false
-ReflowComments: false
-
-# AlwaysBreakTemplateDeclarations: No
-# AllowAllParametersOfDeclarationOnNextLine : false
-# 
-# AlignArrayOfStructures : Right
-# AllowAllArgumentsOnNextLine : false
-# AlignAfterOpenBracket : 
-# ArrayInitializerAlignmentStyle: Right
-# BreakArrays : true
-# BinPackArgumens: true
-# BracketAlignmentStyle: DontAlign
-AllowAllArgumentsOnNextLine : false
-ColumnLimit : 120
-AllowShortFunctionsOnASingleLine : None
-SortIncludes : Never
-
-# AccessModifierOffset: -4
-# AlignAfterOpenBracket: false
-# AlignConsecutiveAssignments: false
-# AlignConsecutiveDeclarations: false
-# AlignEscapedNewlines: Left
-# AlignOperands: false
-# AlignTrailingComments: false
-# AllowAllParametersOfDeclarationOnNextLine: false
-# AllowShortBlocksOnASingleLine: false
-# AllowShortCaseLabelsOnASingleLine: false
-# AllowShortFunctionsOnASingleLine: None
-# AllowShortIfStatementsOnASingleLine: false
-# AllowShortLoopsOnASingleLine: false
-# AlwaysBreakAfterDefinitionReturnType: None
-# AlwaysBreakAfterReturnType: None
-# AlwaysBreakBeforeMultilineStrings: false
-# AlwaysBreakTemplateDeclarations: false
-# BinPackArguments: true
-# BinPackParameters: true
-# BraceWrapping:
-  # AfterClass: false
-  # AfterControlStatement: false
-  # AfterEnum: false
-  # AfterFunction: false
-  # AfterNamespace: true
-  # AfterObjCDeclaration: false
-  # AfterStruct: false
-  # AfterUnion: false
-  # AfterExternBlock: false
-  # BeforeCatch: false
-  # BeforeElse: false
-  # IndentBraces: false
-  # SplitEmptyFunction: true
-  # SplitEmptyRecord: true
-  # SplitEmptyNamespace: true
-# BreakBeforeBinaryOperators: None
-# BreakBeforeBraces: Custom
-# BreakBeforeInheritanceComma: false
-# BreakBeforeTernaryOperators: false
-# BreakConstructorInitializersBeforeComma: false
-# BreakConstructorInitializers: BeforeComma
-# BreakAfterJavaFieldAnnotations: false
-# BreakStringLiterals: false
-# ColumnLimit: 200
-# CommentPragmas: '^ IWYU pragma:'
-# CompactNamespaces: false
-# ConstructorInitializerAllOnOneLineOrOnePerLine: false
-# ConstructorInitializerIndentWidth: 4
-# ContinuationIndentWidth: 4
-# Cpp11BracedListStyle: false
-# DerivePointerAlignment: false
-# DisableFormat: false
-# ExperimentalAutoDetectBinPacking: false
-# FixNamespaceComments: false
-
-# Taken from:
-#   git grep -h '^#define [^[:space:]]*for_each[^[:space:]]*(' include/ tools/ \
-#   | sed "s,^#define \([^[:space:]]*for_each[^[:space:]]*\)(.*$,  - '\1'," \
-#   | LC_ALL=C sort -u
-
-# IncludeBlocks: Preserve
-# IncludeCategories:
-  # - Regex: '.*'
-    # Priority: 1
-# IncludeIsMainRegex: '(Test)?$'
-# IndentCaseLabels: false
-# IndentGotoLabels: false
-# IndentPPDirectives: None
-# IndentWidth: 4
-# IndentWrappedFunctionNames: false
-# JavaScriptQuotes: Leave
-# JavaScriptWrapImports: true
-# KeepEmptyLinesAtTheStartOfBlocks: false
-# MacroBlockBegin: ''
-# MacroBlockEnd: ''
-# MaxEmptyLinesToKeep: 1
-# NamespaceIndentation: None
-# ObjCBinPackProtocolList: Auto
-# ObjCBlockIndentWidth: 4
-# ObjCSpaceAfterProperty: true
-# ObjCSpaceBeforeProtocolList: true
+BraceWrapping:
+  AfterClass: false
+  AfterControlStatement: false
+  AfterEnum: false
+  AfterFunction: true
+  AfterNamespace: true
+  AfterObjCDeclaration: false
+  AfterStruct: false
+  AfterUnion: false
+  AfterExternBlock: false
+  BeforeCatch: false
+  BeforeElse: false
+  IndentBraces: false
+  SplitEmptyFunction: true
+  SplitEmptyRecord: true
+  SplitEmptyNamespace: true
+BreakBeforeBinaryOperators: None
+BreakBeforeBraces: Custom
+BreakBeforeInheritanceComma: false
+BreakBeforeTernaryOperators: false
+BreakConstructorInitializersBeforeComma: false
+BreakConstructorInitializers: BeforeComma
+BreakAfterJavaFieldAnnotations: false
+BreakStringLiterals: false
+ColumnLimit: 80
+CommentPragmas: '^ IWYU pragma:'
+CompactNamespaces: false
+ConstructorInitializerAllOnOneLineOrOnePerLine: false
+ConstructorInitializerIndentWidth: 8
+ContinuationIndentWidth: 8
+Cpp11BracedListStyle: true
+DerivePointerAlignment: false
+DisableFormat: false
+ExperimentalAutoDetectBinPacking: false
+FixNamespaceComments: false
+ForEachMacros:
+  - cujo_foreach_nlattr
+  - cujo_foreach_nlattr_at
+  - LIST_FOREACH
+  - LIST_FOREACH_FROM
+  - LIST_FOREACH_FROM_SAFE
+  - LIST_FOREACH_SAFE
+  - RB_FOREACH
+  - RB_FOREACH_FROM
+  - RB_FOREACH_REVERSE
+  - RB_FOREACH_REVERSE_FROM
+  - RB_FOREACH_REVERSE_SAFE
+  - RB_FOREACH_SAFE
+  - CUJO_SLAB_FOREACH
+  - SLIST_FOREACH
+  - SLIST_FOREACH_FROM
+  - SLIST_FOREACH_FROM_SAFE
+  - SLIST_FOREACH_PREVPTR
+  - SLIST_FOREACH_SAFE
+  - SPLAY_FOREACH
+  - STAILQ_FOREACH
+  - STAILQ_FOREACH_FROM
+  - STAILQ_FOREACH_FROM_SAFE
+  - STAILQ_FOREACH_SAFE
+  - TAILQ_FOREACH
+  - TAILQ_FOREACH_FROM
+  - TAILQ_FOREACH_FROM_SAFE
+  - TAILQ_FOREACH_REVERSE
+  - TAILQ_FOREACH_REVERSE_FROM
+  - TAILQ_FOREACH_REVERSE_FROM_SAFE
+  - TAILQ_FOREACH_REVERSE_SAFE
+  - TAILQ_FOREACH_SAFE
+IncludeBlocks: Preserve
+IncludeCategories:
+  - Regex: '.*'
+    Priority: 1
+IncludeIsMainRegex: '(Test)?$'
+IndentCaseLabels: false
+IndentPPDirectives: None
+IndentWidth: 8
+IndentWrappedFunctionNames: false
+JavaScriptQuotes: Leave
+JavaScriptWrapImports: true
+KeepEmptyLinesAtTheStartOfBlocks: false
+MacroBlockBegin: ''
+MacroBlockEnd: ''
+MaxEmptyLinesToKeep: 1
+NamespaceIndentation: Inner
+ObjCBinPackProtocolList: Auto
+ObjCBlockIndentWidth: 8
+ObjCSpaceAfterProperty: true
+ObjCSpaceBeforeProtocolList: true
 
 # Taken from git's rules
 PenaltyBreakAssignment: 10
@@ -131,23 +126,25 @@ PenaltyBreakString: 10
 PenaltyExcessCharacter: 100
 PenaltyReturnTypeOnItsOwnLine: 60
 
-# PointerAlignment: Right
-# ReflowComments: false
-# SortIncludes: false
-# SortUsingDeclarations: false
-# SpaceAfterCStyleCast: false
-# SpaceAfterTemplateKeyword: true
-# SpaceBeforeAssignmentOperators: true
-# SpaceBeforeCtorInitializerColon: true
-# SpaceBeforeInheritanceColon: true
-# SpaceBeforeParens: ControlStatementsExceptForEachMacros
-# SpaceBeforeRangeBasedForLoopColon: true
-# SpaceInEmptyParentheses: false
-# SpacesBeforeTrailingComments: 1
-# SpacesInAngles: false
-# SpacesInContainerLiterals: false
-# SpacesInCStyleCastParentheses: false
-# SpacesInParentheses: false
-# SpacesInSquareBrackets: false
-# Standard: Cpp03
-# TabWidth: 4
+PointerAlignment: Right
+ReflowComments: false
+SortIncludes: false
+SortUsingDeclarations: false
+SpaceAfterCStyleCast: false
+SpaceAfterTemplateKeyword: true
+SpaceBeforeAssignmentOperators: true
+SpaceBeforeCtorInitializerColon: true
+SpaceBeforeInheritanceColon: true
+SpaceBeforeParens: ControlStatements
+SpaceBeforeRangeBasedForLoopColon: true
+SpaceInEmptyParentheses: false
+SpacesBeforeTrailingComments: 1
+SpacesInAngles: false
+SpacesInContainerLiterals: false
+SpacesInCStyleCastParentheses: false
+SpacesInParentheses: false
+SpacesInSquareBrackets: false
+Standard: Cpp03
+TabWidth: 8
+UseTab: Always
+...

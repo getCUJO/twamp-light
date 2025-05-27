@@ -1,10 +1,13 @@
 //
 // Created by vladim0105 on 12/15/21.
 //
-
-#ifndef TWAMP_LIGHT_CLIENT_H
-#define TWAMP_LIGHT_CLIENT_H
-
+#include "utils.hpp"
+#include "packetlist.h"
+#include <condition_variable>
+#include <cstdint>
+#include <memory>
+#include <queue>
+#include <semaphore.h>
 #include <string>
 #include <vector>
 #include <queue>
@@ -16,27 +19,33 @@ extern "C" {
 #include "simple-qoo.h"
 }
 struct Args {
-    std::vector<std::string> remote_hosts;
-    std::vector<uint16_t> remote_ports;
-    std::string local_host;
+    std::vector<std::string> remote_hosts{};
+    std::vector<uint16_t> remote_ports{};
+    std::string local_host{};
     std::string local_port = "0";
     uint8_t ip_version = 4;
-    std::vector<int16_t> payload_lens = {50, 250, 450, 650, 850, 1050, 1250, 1400};
+    std::vector<int16_t> payload_lens = {PAYLOAD_LEN_50,
+                                         PAYLOAD_LEN_250,
+                                         PAYLOAD_LEN_450,
+                                         PAYLOAD_LEN_650,
+                                         PAYLOAD_LEN_850,
+                                         PAYLOAD_LEN_1050,
+                                         PAYLOAD_LEN_1250,
+                                         PAYLOAD_LEN_1400};
     uint8_t snd_tos = 0;
     uint8_t dscp_snd = 0;
     uint32_t num_samples = 10;
-    uint32_t mean_inter_packet_delay = 200;
-    uint32_t timeout = 10;
+    uint32_t mean_inter_packet_delay_ms = DEFAULT_MEAN_INTER_PACKET_DELAY;
+    uint8_t timeout = 10;
     uint32_t seed = 0;
     uint32_t runtime = 0;
     char sep = ',';
-    bool sync_time = false;
     bool print_digest = false;
     bool print_RTT_only = false;
     bool print_lost_packets = false;
     bool constant_inter_packet_delay = false;
     std::string print_format = "legacy";
-    std::string json_output_file;
+    std::string json_output_file{};
 };
 
 struct RawData {
@@ -83,29 +92,37 @@ struct MetricData {
 
 class Client {
   public:
-    Client(const Args &args);
+    explicit Client(const Args &args);
     ~Client();
-    Timestamp sendPacket(uint32_t idx, size_t payload_len);
-    bool awaitAndHandleResponse();
+
+    // Delete copy constructor and copy assignment operator
+    Client(const Client &) = delete;
+    auto operator=(const Client &) -> Client & = delete;
+    // Delete move constructor and move assignment operator
+    Client(Client &&) = delete;
+    auto operator=(Client &&) -> Client & = delete;
+
+    auto sendPacket(uint32_t idx, size_t payload_len) -> Timestamp;
+    auto awaitAndHandleResponse() -> bool;
     void printStats(int packets_sent);
-    void printRawDataHeader();
-    void aggregateRawData(RawData *oldest_raw_data);
+    void printRawDataHeader() const;
+    void aggregateRawData(const std::shared_ptr<RawData> &oldest_raw_dat);
     void runSenderThread();
     void runReceiverThread();
     void runCollatorThread();
-    void enqueue_observation(struct qed_observation *obs);
-    void process_observation(struct qed_observation *obs);
+    void enqueue_observation(const std::shared_ptr<QEDObservation> &obs);
+    void process_observation(const std::shared_ptr<QEDObservation> &obs);
     void check_if_oldest_packet_should_be_processed();
-    void print_lost_packet(uint32_t packet_id, uint64_t initial_send_time, uint16_t payload_len);
-    int getSentPackets();
-    void printHeader();
-    void JsonLog(std::string filename);
+    void print_lost_packet(uint32_t packet_id, uint64_t initial_send_time, uint16_t payload_len) const;
+    [[nodiscard]] auto getSentPackets() const -> int;
+    void printHeader() const;
+    void JsonLog(const std::string &json_output_file);
 
   private:
     int fd = -1;
     int sent_packets = 0;
     int received_packets = 0;
-    uint32_t last_received_packet_id = -1;
+    int32_t last_received_packet_id = -1;
     uint64_t sending_completed = 0;
     uint64_t start_time = 0;
     int collator_started = 0;
@@ -140,7 +157,5 @@ class Client {
 
     template <typename Func> void printSummaryLine(const std::string &label, Func func);
 
-    void printMetrics(const MetricData &data);
+    void printMetrics(const MetricData &data) const;
 };
-
-#endif // TWAMP_LIGHT_CLIENT_H

@@ -28,12 +28,8 @@ void timeval_to_timestamp(const struct timeval *tv, Timestamp *ts)
     if (!tv || !ts)
         return;
 
-    /* Unix time to NTP */
-    ts->integer = tv->tv_sec + 2208988800uL;
-    ts->fractional = (uint32_t) ((double) tv->tv_usec * ((double) (1uLL << 32) / (double) 1e6));
-
-    ts->integer = (ts->integer);
-    ts->fractional = (ts->fractional);
+    ts->integer = (uint32_t) tv->tv_sec + NTP_EPOCH_OFFSET;
+    ts->fractional = (uint32_t) ((double) tv->tv_usec * ((double) (1ULL << 32) / MICROSECONDS_IN_SECOND));
 }
 
 void timespec_to_timestamp(const struct timespec *tv, Timestamp *ts)
@@ -42,10 +38,8 @@ void timespec_to_timestamp(const struct timespec *tv, Timestamp *ts)
         return;
 
     /* Unix time to NTP */
-    ts->integer = tv->tv_sec + 2208988800uL;
-    ts->fractional = (uint32_t) ((double) tv->tv_nsec * ((double) (1uLL << 32) / (double) 1e9));
-    ts->integer = (ts->integer);
-    ts->fractional = (ts->fractional);
+    ts->integer = (uint32_t) tv->tv_sec + NTP_EPOCH_OFFSET;
+    ts->fractional = (uint32_t) ((double) tv->tv_nsec * ((double) (1ULL << 32) / NANOSECONDS_IN_SECOND));
 }
 
 void timestamp_to_timeval(const Timestamp *ts, struct timeval *tv)
@@ -63,7 +57,7 @@ void timestamp_to_timeval(const Timestamp *ts, struct timeval *tv)
     tv->tv_usec = (uint32_t) (double) ts_host_ord.fractional * (double) 1e6 / (double) (1uLL << 32);
 }
 
-void timestamp_to_timespec(const Timestamp *ts, struct timespec *tv)
+static void timestamp_to_timespec(const Timestamp *ts, struct timespec *tv)
 {
     if (!tv || !ts)
         return;

@@ -13,13 +13,25 @@
 #include <chrono>
 #include <cstdint>
 #include <ctime>
-#include "Client.h"
-#include "utils.hpp"
-#include "json.hpp"
+#include <iomanip>
+#include <iostream>
+#include <memory>
+#include <netdb.h>
+#include <sys/types.h>
+#include <unistd.h>
+
+constexpr int COLLATOR_SLEEP_DURATION_MICROSECONDS = 100;
+constexpr double NANOSECONDS_TO_MILLISECONDS = 1e-6;
+constexpr double SYNC_DELAY_EPSILON_THRESHOLD = 0.01; // Threshold for comparison
+constexpr int64_t MICROSECONDS_IN_MILLISECOND = 1000;
+constexpr int64_t MILLISECONDS_IN_SECOND = 1000;
+constexpr int64_t NANOSECONDS_IN_MICROSECOND = 1000;
+constexpr int64_t NANOSECONDS_IN_SECOND = 1000000000;
+constexpr int64_t MAXINT64 = std::numeric_limits<int64_t>::max();
 
 using Clock = std::chrono::system_clock;
 
-Client::Client(const Args &args) : start_time(time(nullptr)), raw_data_list(), args(args)
+Client::Client(const Args &args) : start_time((uint64_t) time(nullptr)), raw_data_list(), args(args)
 {
     // Construct remote socket address
     struct addrinfo hints{};
@@ -37,7 +49,7 @@ Client::Client(const Args &args) : start_time(time(nullptr)), raw_data_list(), a
     hints.ai_flags = AI_PASSIVE | AI_ADDRCONFIG;
     // Resize the remote_address_info vector based on the number of remote hosts
     remote_address_info.resize(args.remote_hosts.size());
-    int i = 0;
+    size_t i = 0;
     for (const auto &remote_host : args.remote_hosts) {
         std::string port;
         try {
@@ -117,52 +129,23 @@ Client::~Client()
     }
 }
 
-std::string decode_observation_point(ObservationPoints observation_point)
-{
-    std::string retval;
-    if (observation_point == ObservationPoints::CLIENT_SEND) {
-        retval = "client_send_time";
-    } else if (observation_point == ObservationPoints::SERVER_RECEIVE) {
-        retval = "server_receive_time";
-    } else if (observation_point == ObservationPoints::SERVER_SEND) {
-        retval = "server_send_time";
-    } else if (observation_point == ObservationPoints::CLIENT_RECEIVE) {
-        retval = "client_receive_time";
-    } else {
-        retval = "unknown";
-    }
-    return retval;
-}
-
-struct qed_observation *make_qed_observation(ObservationPoints observation_point,
-                                             uint64_t epoch_nanoseconds,
-                                             uint32_t packet_id,
-                                             uint16_t payload_len)
-{
-    struct qed_observation *obs = (struct qed_observation *) malloc(sizeof(struct qed_observation));
-    obs->observation_point = observation_point;
-    obs->epoch_nanoseconds = epoch_nanoseconds;
-    obs->packet_id = packet_id;
-    obs->payload_len = payload_len;
-    return obs;
-}
-
 /* The packet generation function */
 void Client::runSenderThread()
 {
     uint32_t index = 0;
-    std::random_device rd;  // Will be used to obtain a seed for the random number engine
-    std::mt19937 gen(rd()); // Standard mersenne_twister_engine seeded with rd()
-    std::exponential_distribution<> d(1.0 /
-                                      (args.mean_inter_packet_delay * 1000)); // Lambda is 1.0/mean (in microseconds)
+    std::random_device rd;                                // Will be used to obtain a seed for the random number engine
+    std::mt19937 gen(rd());                               // Standard mersenne_twister_engine seeded with rd()
+    constexpr double MAX_DELAY_MICROSECONDS = 10000000.0; // Maximum delay in microseconds
+    std::exponential_distribution<> d(1.0 / (static_cast<double>(args.mean_inter_packet_delay_ms) *
+                                             MICROSECONDS_IN_MILLISECOND)); // Lambda is 1.0/mean (in microseconds)
     while (args.num_samples == 0 || index < args.num_samples ||
-           (args.runtime != 0 && time(NULL) - this->start_time < args.runtime)) {
-        size_t payload_len = *select_randomly(args.payload_lens.begin(), args.payload_lens.end(), args.seed);
-        uint32_t delay;
+           (args.runtime != 0 && (uint64_t) time(nullptr) - this->start_time < args.runtime)) {
+        size_t payload_len = (size_t) *select_randomly(args.payload_lens.begin(), args.payload_lens.end(), args.seed);
+        uint32_t delay = 0;
         if (args.constant_inter_packet_delay) {
-            delay = args.mean_inter_packet_delay * 1000;
+            delay = args.mean_inter_packet_delay_ms * MICROSECONDS_IN_MILLISECOND;
         } else {
-            delay = std::max((double) std::min((double) d(gen), 10000000.0), 0.0);
+            delay = std::max(static_cast<uint32_t>(std::min(d(gen), MAX_DELAY_MICROSECONDS)), static_cast<uint32_t>(0));
         }
         usleep(delay);
         try {
@@ -171,11 +154,12 @@ void Client::runSenderThread()
                 first_packet_sent_epoch_nanoseconds = timestamp_to_nsec(&sent_time);
             }
             last_packet_sent_epoch_nanoseconds = timestamp_to_nsec(&sent_time);
-            if (this->collator_started) {
-                struct qed_observation *obs = make_qed_observation(ObservationPoints::CLIENT_SEND,
-                                                                   timestamp_to_nsec(&sent_time),
-                                                                   index,
-                                                                   payload_len);
+            if (this->collator_started != 0) {
+                auto obs = std::make_shared<QEDObservation>(ObservationPoints::CLIENT_SEND,
+                                                            timestamp_to_nsec(&sent_time),
+                                                            index,
+                                                            payload_len);
+
                 enqueue_observation(obs);
             }
         } catch (const std::exception &e) { // catch error from sendPacket
@@ -183,7 +167,7 @@ void Client::runSenderThread()
         }
         index++;
     }
-    this->sending_completed = time(NULL);
+    this->sending_completed = (uint64_t) time(nullptr);
 }
 
 /* Receives and processes the reflected
@@ -193,7 +177,8 @@ void Client::runReceiverThread()
     /* run forever if num_samples is 0, 
     otherwise run until all packets have been received (or timed out) */
     while ((args.num_samples == 0 || this->sending_completed == 0 ||
-            (this->received_packets < this->sent_packets && time(NULL) - this->sending_completed < args.timeout))) {
+            (this->received_packets < this->sent_packets &&
+             (uint64_t) time(nullptr) - this->sending_completed < args.timeout))) {
         awaitAndHandleResponse();
     }
 }
@@ -506,10 +491,7 @@ struct TimeData {
     uint64_t server_send_time;
 };
 
-TimeData computeTimeData(bool sync_time,
-                         uint64_t client_receive_time,
-                         ReflectorPacket *reflectorPacket,
-                         TimeSynchronizer *timeSynchronizer)
+static auto computeTimeData(uint64_t client_receive_time, ReflectorPacket *reflectorPacket) -> TimeData
 {
     TimeData timeData;
     if (sync_time) {
@@ -553,15 +535,15 @@ TimeData computeTimeData(bool sync_time,
     return timeData;
 }
 
-void populateMetricData(MetricData &data,
-                        ReflectorPacket *reflectorPacket,
-                        const IPHeader &ipHeader,
-                        const std::string &host,
-                        uint16_t local_port,
-                        uint16_t port,
-                        ssize_t payload_len,
-                        TimeData &timeData,
-                        struct sqa_stats *stats)
+static void populateMetricData(MetricData &data,
+                               ReflectorPacket *reflectorPacket,
+                               const IPHeader &ipHeader,
+                               const std::string &host,
+                               uint16_t local_port,
+                               uint16_t port,
+                               ssize_t payload_len,
+                               const TimeData &timeData,
+                               struct sqa_stats *stats)
 {
     data.ip = host;
     data.sending_port = local_port;
@@ -569,11 +551,11 @@ void populateMetricData(MetricData &data,
     data.packet = *reflectorPacket;
     data.ipHeader = ipHeader;
     data.initial_send_time = timeData.client_send_time;
-    data.payload_length = payload_len;
-    data.internal_delay = timeData.internal_delay;
-    data.server_client_delay = timeData.server_client_delay;
-    data.client_server_delay = timeData.client_server_delay;
-    data.rtt_delay = timeData.rtt;
+    data.payload_length = (uint16_t) payload_len;
+    data.internal_delay_nanoseconds = timeData.internal_delay;
+    data.server_client_delay_nanoseconds = timeData.server_client_delay;
+    data.client_server_delay_nanoseconds = timeData.client_server_delay;
+    data.rtt_delay_nanoseconds = timeData.rtt;
     data.packets_sent = uint64_t(stats->number_of_samples);
     data.packets_lost = uint64_t(stats->number_of_lost_packets);
 }
@@ -613,7 +595,7 @@ void Client::handleReflectorPacket(ReflectorPacket *reflectorPacket,
     } else {
         // Convert timespec to timestamp
         incoming_timestamp_nanoseconds =
-            (uint64_t) incoming_timestamp->tv_sec * 1000000000 + incoming_timestamp->tv_nsec;
+            (uint64_t) incoming_timestamp->tv_sec * NANOSECONDS_IN_SECOND + (uint64_t) incoming_timestamp->tv_nsec;
     }
     last_packet_received_epoch_nanoseconds = incoming_timestamp_nanoseconds;
 
@@ -626,21 +608,21 @@ void Client::handleReflectorPacket(ReflectorPacket *reflectorPacket,
     // uint16_t  port = ntohs(sock->sin_port);
     // uint16_t local_port = atoi(args.local_port.c_str());
     uint32_t packet_id = ntohl(reflectorPacket->seq_number);
-    this->last_received_packet_id = packet_id;
+    this->last_received_packet_id = (int32_t) packet_id;
     this->received_packets += 1;
-    if (this->collator_started) {
-        struct qed_observation *obs1 = make_qed_observation(ObservationPoints::CLIENT_RECEIVE,
-                                                            incoming_timestamp_nanoseconds,
-                                                            packet_id,
-                                                            payload_len);
-        struct qed_observation *obs2 = make_qed_observation(ObservationPoints::SERVER_RECEIVE,
-                                                            timestamp_to_nsec(&server_receive_time),
-                                                            packet_id,
-                                                            payload_len);
-        struct qed_observation *obs3 = make_qed_observation(ObservationPoints::SERVER_SEND,
-                                                            timestamp_to_nsec(&server_send_time),
-                                                            packet_id,
-                                                            payload_len);
+    if (this->collator_started != 0) {
+        auto obs1 = std::make_shared<QEDObservation>(ObservationPoints::CLIENT_RECEIVE,
+                                                     incoming_timestamp_nanoseconds,
+                                                     packet_id,
+                                                     payload_len);
+        auto obs2 = std::make_shared<QEDObservation>(ObservationPoints::SERVER_RECEIVE,
+                                                     timestamp_to_nsec(&server_receive_time),
+                                                     packet_id,
+                                                     payload_len);
+        auto obs3 = std::make_shared<QEDObservation>(ObservationPoints::SERVER_SEND,
+                                                     timestamp_to_nsec(&server_send_time),
+                                                     packet_id,
+                                                     payload_len);
 
         // Queue all observations in the FIFO to the collator
         enqueue_observation(obs3);
@@ -708,11 +690,15 @@ void Client::printHeader()
 void Client::printMetrics(const MetricData &data)
 {
     char sync = 'N';
-    uint64_t estimated_rtt = data.client_server_delay + data.server_client_delay + data.internal_delay;
-    if (isWithinEpsilon((double) data.rtt_delay * 1e-6, (double) estimated_rtt * 1e-6, 0.01)) {
+    auto estimated_rtt_nanoseconds =
+        (uint64_t) (data.client_server_delay_nanoseconds + data.server_client_delay_nanoseconds +
+                    data.internal_delay_nanoseconds);
+    if (isWithinEpsilon((double) data.rtt_delay_nanoseconds * NANOSECONDS_TO_MILLISECONDS,
+                        (double) estimated_rtt_nanoseconds * NANOSECONDS_TO_MILLISECONDS,
+                        SYNC_DELAY_EPSILON_THRESHOLD)) {
         sync = 'Y';
     }
-    if ((data.client_server_delay < 0) || (data.server_client_delay < 0)) {
+    if ((data.client_server_delay_nanoseconds < 0) || (data.server_client_delay_nanoseconds < 0)) {
         sync = 'N';
     }
     /*Sequence number */
@@ -821,7 +807,7 @@ void Client::printStats(int packets_sent)
     printPercentileLine("p99.9:", 99.9);
 }
 
-nlohmann::json td_to_json(td_histogram_t *histogram)
+static auto td_to_json(td_histogram_t *histogram) -> nlohmann::json
 {
     nlohmann::json json;
     td_compress(histogram);
@@ -837,7 +823,13 @@ nlohmann::json td_to_json(td_histogram_t *histogram)
     return json;
 }
 
-std::string map_tos_to_traffic_class(uint8_t tos)
+// Map TOS values to traffic classes
+constexpr uint8_t TOS_BE = 0x00;
+constexpr uint8_t TOS_BK = 0x20;
+constexpr uint8_t TOS_VI = 0x80;
+constexpr uint8_t TOS_VO = 0xA0;
+
+static auto map_tos_to_traffic_class(uint8_t tos) -> std::string
 {
     switch (tos) {
     case 0x00:

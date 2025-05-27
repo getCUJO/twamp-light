@@ -13,11 +13,11 @@
 #include <sstream>
 #include "packets.h"
 
-#define HDR_TTL 255 /* TTL=255 in TWAMP for IP Header */
-#define SERVER_PORT 862
-#define CHECK_TIMES 100
-#define IPV4 4
-#define IPV6 6
+constexpr int HDR_TTL = 255; /* TTL=255 in TWAMP for IP Header */
+constexpr int SERVER_PORT = 862;
+constexpr int CHECK_TIMES = 100;
+constexpr int IPV4 = 4;
+constexpr int IPV6 = 6;
 
 /* TWAMP timestamp is NTP time (RFC1305).
  * Should be in network byte order!      */
@@ -50,7 +50,8 @@ template <class T> std::string vectorToString(std::vector<T> vec, std::string se
 }
 template <typename Iter, typename RandomGenerator> Iter select_randomly(Iter start, Iter end, RandomGenerator &g)
 {
-    std::uniform_int_distribution<> dis(0, std::distance(start, end) - 1);
+    auto dist = std::distance(start, end);
+    std::uniform_int_distribution<> dis(0, static_cast<int>(dist) - 1);
     std::advance(start, dis(g));
     return start;
 }

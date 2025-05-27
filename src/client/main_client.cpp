@@ -11,7 +11,7 @@
 #include "Client.h"
 #include "CLI11.hpp"
 
-Args parse_args(int argc, char **argv)
+static auto parse_args(int argc, char **argv) -> Args
 {
     Args args;
     bool print_version = false;
@@ -34,7 +34,9 @@ Args parse_args(int argc, char **argv)
     app.add_option("-s, --seed", args.seed, "Seed for the RNG. 0 means random.");
     app.add_flag("--print-digest{true}", args.print_digest, "Prints a statistical summary at the end.");
     app.add_option("-j, --json-output", args.json_output_file, "Filename to dump json output to");
-    app.add_flag("--print-lost-packets", args.print_lost_packets, "Prints sent and lost packet counters, legacy format only");
+    app.add_flag("--print-lost-packets",
+                 args.print_lost_packets,
+                 "Prints sent and lost packet counters, legacy format only");
     app.add_option("--print-RTT-only", args.print_RTT_only, "Prints only the RTT values.");
     app.add_option("--print-format",
                    args.print_format,
@@ -42,7 +44,10 @@ Args parse_args(int argc, char **argv)
         ->default_str(args.print_format);
     app.add_option("--sep", args.sep, "The separator to use in the output.");
     app.add_option("--ip", args.ip_version, "The IP version to use.");
-    app.add_option("--runtime", args.runtime, "Run for this number of seconds before terminating. This option overrides the -n (--num_samples) option.");
+    app.add_option(
+        "--runtime",
+        args.runtime,
+        "Run for this number of seconds before terminating. This option overrides the -n (--num_samples) option.");
     app.add_flag(
         "--sync{true}",
         args.sync_time,
@@ -52,8 +57,8 @@ Args parse_args(int argc, char **argv)
                    "The mean inter-packet delay in milliseconds.")
         ->default_str(std::to_string(args.mean_inter_packet_delay));
     app.add_flag("--constant-inter-packet-delay",
-                   args.constant_inter_packet_delay,
-                   "The constant inter-packet delay in milliseconds. Overrides the default Poisson traffic pattern.");
+                 args.constant_inter_packet_delay,
+                 "The constant inter-packet delay in milliseconds. Overrides the default Poisson traffic pattern.");
     uint8_t tos = 0;
     auto opt_tos = app.add_option("-T, --tos", tos, "The TOS value (<256).")
                        ->check(CLI::Range(256))

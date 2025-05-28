@@ -41,7 +41,18 @@ static auto parse_args(int argc, char **argv)
 
 int main(int argc, char **argv)
 {
-    Args args = parse_args(argc, argv);
-    Server server = Server(args);
-    return server.listen();
+    try {
+        Args args = parse_args(argc, argv);
+        Server server = Server(args);
+        return server.listen();
+    } catch (const CLI::BadNameString &e) {
+        std::cerr << "Invalid argument: " << e.what() << std::endl;
+        return EXIT_FAILURE;
+    } catch (const std::runtime_error &e) {
+        std::cerr << "Runtime error: " << e.what() << std::endl;
+        return EXIT_FAILURE;
+    } catch (const std::exception &e) {
+        std::cerr << "Exception: " << e.what() << std::endl;
+        return EXIT_FAILURE;
+    }
 }

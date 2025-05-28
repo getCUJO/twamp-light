@@ -27,7 +27,12 @@ struct MetricData {
 };
 class Server {
   public:
-    Server(const Args &args);
+    explicit Server(const Args &args);
+    Server(const Server &other) = default;
+    auto operator=(const Server &other) -> Server & = default;
+    Server(Server &&other) noexcept = default;
+    auto operator=(Server &&other) noexcept -> Server & = default;
+    auto listen() -> int;
     ~Server();
 
     int listen();

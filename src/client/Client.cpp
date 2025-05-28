@@ -127,6 +127,9 @@ Client::~Client()
     if (local_address_info != nullptr) {
         freeaddrinfo(local_address_info);
     }
+    if (fd != -1) {
+        close(fd);
+    }
 }
 
 /* The packet generation function */
@@ -656,8 +659,17 @@ void Client::printReflectorPacket(ReflectorPacket *reflectorPacket,
     populateMetricData(data, reflectorPacket, ipHeader, host, local_port, port, payload_len, timeData, stats);
 
     if (args.print_RTT_only) {
-        std::cout << std::fixed << (double) timeData.rtt / 1e-6 << "\n";
-        fflush(stdout);
+        // Save current format state
+        std::ostream &os = std::cout;
+        std::ios::fmtflags f = os.flags();
+        std::streamsize prec = os.precision();
+        char fill = os.fill();
+        os << std::fixed << (double) timeData.rtt / NANOSECONDS_TO_MILLISECONDS << "\n";
+        (void) fflush(stdout);
+        // Restore format state
+        os.flags(f);
+        os.precision(prec);
+        os.fill(fill);
     } else {
         printMetrics(data);
     }
@@ -704,96 +716,131 @@ void Client::printMetrics(const MetricData &data)
     /*Sequence number */
     uint32_t rcv_sn = ntohl(data.packet.seq_number);
     uint32_t snd_sn = ntohl(data.packet.sender_seq_number);
+    // Save current format state
+    std::ostream &os = std::cout;
+    std::ios::fmtflags f = os.flags();
+    std::streamsize prec = os.precision();
+    char fill = os.fill();
 
-    std::cout << std::fixed << data.initial_send_time << args.sep << data.ip << args.sep << snd_sn << args.sep << rcv_sn
-              << args.sep << data.sending_port << args.sep << data.receiving_port << args.sep << sync << args.sep
-              << unsigned(data.packet.sender_ttl) << args.sep << unsigned(data.ipHeader.ttl) << args.sep
-              << unsigned(args.snd_tos) << args.sep << unsigned(data.packet.sender_tos) << args.sep
-              << unsigned(data.ipHeader.tos) << args.sep
-              << (double) data.rtt_delay_nanoseconds * NANOSECONDS_TO_MILLISECONDS // Nanoseconds to milliseconds
-              << args.sep << (double) data.internal_delay_nanoseconds * NANOSECONDS_TO_MILLISECONDS << args.sep
-              << (double) data.client_server_delay_nanoseconds * NANOSECONDS_TO_MILLISECONDS << args.sep
-              << (double) data.server_client_delay_nanoseconds * NANOSECONDS_TO_MILLISECONDS << args.sep
-              << data.payload_length;
+    os << std::fixed << data.initial_send_time << args.sep << data.ip << args.sep << snd_sn << args.sep << rcv_sn
+       << args.sep << data.sending_port << args.sep << data.receiving_port << args.sep << sync << args.sep
+       << unsigned(data.packet.sender_ttl) << args.sep << unsigned(data.ipHeader.ttl) << args.sep
+       << unsigned(args.snd_tos) << args.sep << unsigned(data.packet.sender_tos) << args.sep
+       << unsigned(data.ipHeader.tos) << args.sep
+       << (double) data.rtt_delay_nanoseconds * NANOSECONDS_TO_MILLISECONDS // Nanoseconds to milliseconds
+       << args.sep << (double) data.internal_delay_nanoseconds * NANOSECONDS_TO_MILLISECONDS << args.sep
+       << (double) data.client_server_delay_nanoseconds * NANOSECONDS_TO_MILLISECONDS << args.sep
+       << (double) data.server_client_delay_nanoseconds * NANOSECONDS_TO_MILLISECONDS << args.sep
+       << data.payload_length;
     if (args.print_lost_packets) {
-        std::cout << args.sep << data.packets_sent << args.sep << data.packets_lost;
+        os << args.sep << data.packets_sent << args.sep << data.packets_lost;
     }
-    std::cout << "\n";
+    os << "\n";
     (void) fflush(stdout);
+    // Restore format state
+    os.flags(f);
+    os.precision(prec);
+    os.fill(fill);
 }
 
 void Client::print_lost_packet(uint32_t packet_id, uint64_t initial_send_time, uint16_t payload_len)
 {
-    std::cout << std::fixed << initial_send_time
-              << args.sep
-              //<< data.ip
-              << args.sep << packet_id
-              << args.sep
-              //<< rcv_sn
-              << args.sep
-              //<< data.sending_port
-              << args.sep
-              //<< data.receiving_port
-              << args.sep
-              //<< sync
-              << args.sep
-              //<< unsigned(data.packet.sender_ttl)
-              << args.sep
-              //<< unsigned(data.ipHeader.ttl)
-              << args.sep
-              //<< unsigned(data.packet.sender_tos)
-              << args.sep << '-'
-              << args.sep
-              //<< unsigned(data.ipHeader.tos)
-              << args.sep
-              //<<(double) data.rtt_delay * 1e-3
-              << args.sep
-              //<<(double) data.internal_delay* 1e-3
-              << args.sep
-              //<< (double) data.client_server_delay * 1e-3
-              << args.sep
-              //<< (double) data.server_client_delay * 1e-3
-              << args.sep << payload_len
-              << args.sep
-              //<< data.packet_loss
-              << "\n";
-    fflush(stdout);
+    // Save current format state
+    std::ostream &os = std::cout;
+    std::ios::fmtflags f = os.flags();
+    std::streamsize prec = os.precision();
+    char fill = os.fill();
+
+    os << std::fixed << initial_send_time
+       << args.sep
+       //<< data.ip
+       << args.sep << packet_id
+       << args.sep
+       //<< rcv_sn
+       << args.sep
+       //<< data.sending_port
+       << args.sep
+       //<< data.receiving_port
+       << args.sep
+       //<< sync
+       << args.sep
+       //<< unsigned(data.packet.sender_ttl)
+       << args.sep
+       //<< unsigned(data.ipHeader.ttl)
+       << args.sep
+       //<< unsigned(data.packet.sender_tos)
+       << args.sep << '-'
+       << args.sep
+       //<< unsigned(data.ipHeader.tos)
+       << args.sep
+       //<<(double) data.rtt_delay * 1e-3
+       << args.sep
+       //<<(double) data.internal_delay* 1e-3
+       << args.sep
+       //<< (double) data.client_server_delay * 1e-3
+       << args.sep
+       //<< (double) data.server_client_delay * 1e-3
+       << args.sep << payload_len
+       << args.sep
+       //<< data.packet_loss
+       << "\n";
+    (void) fflush(stdout);
+    // Restore format state
+    os.flags(f);
+    os.precision(prec);
+    os.fill(fill);
 }
 
 template <typename Func> void Client::printSummaryLine(const std::string &label, Func func)
 {
-    std::cout << " " << std::left << std::setw(10) << label << std::setprecision(6);
-    std::cout << func(this->stats_RTT) << " s      ";
-    std::cout << func(this->stats_client_server) << " s      ";
-    std::cout << func(this->stats_server_client) << " s      ";
-    std::cout << func(this->stats_internal) << " s\n";
-    fflush(stdout);
+    // Save current format state
+    std::ostream &os = std::cout;
+    std::ios::fmtflags f = os.flags();
+    std::streamsize prec = os.precision();
+    char fill = os.fill();
+    os << " " << std::left << std::setw(10) << label << std::setprecision(6);
+    os << func(this->stats_RTT) << " s      ";
+    os << func(this->stats_client_server) << " s      ";
+    os << func(this->stats_server_client) << " s      ";
+    os << func(this->stats_internal) << " s\n";
+    (void) fflush(stdout);
+    // Restore format state
+    os.flags(f);
+    os.precision(prec);
+    os.fill(fill);
 }
 
 void Client::printStats(int packets_sent)
 {
     // printLostPackets();
-    std::cout << std::fixed;
-    std::cout
-        << "Time spent generating packets: "
-        << (double) (Client::last_packet_sent_epoch_nanoseconds - Client::first_packet_sent_epoch_nanoseconds) / 1e9
-        << " s\n";
+    // Save current format state
+    std::ostream &os = std::cout;
+    std::ios::fmtflags f = os.flags();
+    std::streamsize prec = os.precision();
+    char fill = os.fill();
+
+    os << std::fixed;
+    os << "Time spent generating packets: "
+       << (double) (Client::last_packet_sent_epoch_nanoseconds - Client::first_packet_sent_epoch_nanoseconds) /
+              NANOSECONDS_IN_SECOND
+       << " s\n";
     Timestamp now_ts = get_timestamp();
-    std::cout << "Total time elapsed: "
-              << (double) (timestamp_to_nsec(&now_ts) - Client::first_packet_sent_epoch_nanoseconds) / 1e9 << " s\n";
-    std::cout << "Packets sent: " << packets_sent << "\n";
-    std::cout << "Packets lost: " << sqa_stats_get_number_of_lost_packets(Client::stats_RTT) << "\n";
-    std::cout << "Packet loss: " << sqa_stats_get_loss_percentage(Client::stats_RTT) << "%\n";
-    std::cout << "           RTT             FWD             BWD             Internal\n";
-    fflush(stdout);
+    os << "Total time elapsed: "
+       << (double) (timestamp_to_nsec(&now_ts) - Client::first_packet_sent_epoch_nanoseconds) / NANOSECONDS_IN_SECOND
+       << " s\n";
+    os << "Packets sent: " << packets_sent << "\n";
+    os << "Packets lost: " << sqa_stats_get_number_of_lost_packets(Client::stats_RTT) << "\n";
+    os << "Packet loss: " << sqa_stats_get_loss_percentage(Client::stats_RTT) << "%\n";
+    os << "           RTT             FWD             BWD             Internal\n";
+    (void) fflush(stdout);
 
     auto printPercentileLine = [&](const std::string &label, double percentile) {
-        std::cout << " " << std::left << std::setw(10) << label << std::setprecision(6);
-        std::cout << sqa_stats_get_percentile(Client::stats_RTT, percentile) << " s      ";
-        std::cout << sqa_stats_get_percentile(Client::stats_client_server, percentile) << " s      ";
-        std::cout << sqa_stats_get_percentile(Client::stats_server_client, percentile) << " s      ";
-        std::cout << sqa_stats_get_percentile(Client::stats_internal, percentile) << " s\n";
-        fflush(stdout);
+        os << " " << std::left << std::setw(10) << label << std::setprecision(6);
+        os << sqa_stats_get_percentile(Client::stats_RTT, percentile) << " s      ";
+        os << sqa_stats_get_percentile(Client::stats_client_server, percentile) << " s      ";
+        os << sqa_stats_get_percentile(Client::stats_server_client, percentile) << " s      ";
+        os << sqa_stats_get_percentile(Client::stats_internal, percentile) << " s\n";
+        (void) fflush(stdout);
     };
 
     printSummaryLine("mean:", sqa_stats_get_mean);
@@ -802,9 +849,16 @@ void Client::printStats(int packets_sent)
     printSummaryLine("max:", sqa_stats_get_max_as_seconds);
     printSummaryLine("std:", sqa_stats_get_standard_deviation);
     printSummaryLine("variance:", sqa_stats_get_variance);
-    printPercentileLine("p95:", 95);
-    printPercentileLine("p99:", 99);
-    printPercentileLine("p99.9:", 99.9);
+    constexpr double PERCENTILE_95 = 95.0;
+    constexpr double PERCENTILE_99 = 99.0;
+    constexpr double PERCENTILE_99_9 = 99.9;
+    printPercentileLine("p95:", PERCENTILE_95);
+    printPercentileLine("p99:", PERCENTILE_99);
+    printPercentileLine("p99.9:", PERCENTILE_99_9);
+    // Restore format state
+    os.flags(f);
+    os.precision(prec);
+    os.fill(fill);
 }
 
 static auto td_to_json(td_histogram_t *histogram) -> nlohmann::json

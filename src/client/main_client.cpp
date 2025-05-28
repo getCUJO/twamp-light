@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <signal.h>
 #include <iostream>
+#include <json.hpp>
 #include <thread>
 #include "Client.h"
 #include "CLI11.hpp"
@@ -114,22 +115,36 @@ static auto parse_args(int argc, char **argv) -> Args
 
 int main(int argc, char **argv)
 {
-    Args args = parse_args(argc, argv);
-    Client client = Client(args);
-    std::thread receiver_thread(&Client::runReceiverThread, &client);
-    std::thread sender_thread(&Client::runSenderThread, &client);
-    client.printHeader();
-    if (args.print_format != "legacy" || args.print_lost_packets) {
-        client.runCollatorThread();
+    try {
+        Args args = parse_args(argc, argv);
+        Client client = Client(args);
+        std::thread receiver_thread(&Client::runReceiverThread, &client);
+        std::thread sender_thread(&Client::runSenderThread, &client);
+        client.printHeader();
+        if (args.print_format != "legacy" || args.print_lost_packets) {
+            client.runCollatorThread();
+        }
+        sender_thread.join();
+        receiver_thread.join();
+        int packets_sent = client.getSentPackets();
+        if (args.print_digest && args.print_format != "legacy") {
+            client.printStats(packets_sent);
+        }
+        if (!args.json_output_file.empty() && args.print_format != "legacy") {
+            client.JsonLog(args.json_output_file);
+        }
+        return 0;
+    } catch (const CLI::BadNameString &e) {
+        std::cerr << "Invalid argument: " << e.what() << std::endl;
+        return EXIT_FAILURE;
+    } catch (const std::runtime_error &e) {
+        std::cerr << "Runtime error: " << e.what() << std::endl;
+        return EXIT_FAILURE;
+    } catch (const nlohmann::json_abi_v3_12_0::detail::type_error &e) {
+        std::cerr << "JSON error: " << e.what() << std::endl;
+        return EXIT_FAILURE;
+    } catch (const std::exception &e) {
+        std::cerr << "Exception: " << e.what() << std::endl;
+        return EXIT_FAILURE;
     }
-    sender_thread.join();
-    receiver_thread.join();
-    int packets_sent = client.getSentPackets();
-    if (args.print_digest && args.print_format != "legacy") {
-        client.printStats(packets_sent);
-    }
-    if (!args.json_output_file.empty() && args.print_format != "legacy") {
-        client.JsonLog(args.json_output_file);
-    }
-    return 0;
 }

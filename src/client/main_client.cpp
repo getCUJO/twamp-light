@@ -14,23 +14,27 @@
 
 static auto parse_args(int argc, char **argv) -> Args
 {
-    Args args;
+    Args args = {};
     bool print_version = false;
     std::string title = "Twamp-Light implementation written by Domos. Version " + std::string(TWAMP_VERSION_TXT);
-    CLI::App app{title.c_str()};
+    CLI::App app{std::move(title)};
     app.option_defaults()->always_capture_default(true);
     app.add_option("-a, --local_address",
                    args.local_host,
                    "The address to set up the local socket on. Auto-selects by default.");
     app.add_option("-P, --local_port", args.local_port, "The port to set up the local socket on.");
+    constexpr auto MIN_PAYLOAD_LEN = 42;
+    constexpr auto MAX_PAYLOAD_LEN = 1473;
     app.add_option(
            "-l, --payload_lens",
            args.payload_lens,
-           "The payload length. Must be in range (42, 1473). Can be multiple values, in which case it will be sampled randomly.")
+           "The payload length. Must be in range (42, 1473). Can be multiple values, in which case the payload size for each packet will be sampled randomly from the list.")
         ->default_str(vectorToString(args.payload_lens, " "))
-        ->check(CLI::Range(42, 1473));
+        ->check(CLI::Range(MIN_PAYLOAD_LEN, MAX_PAYLOAD_LEN));
     app.add_option("-n, --num_samples", args.num_samples, "Number of samples to expect. Set to 0 for unlimited.");
-    app.add_option("-t, --timeout", args.timeout, "How long (in seconds) to wait for response before aborting.")
+    app.add_option("-t, --timeout",
+                   args.timeout,
+                   "How long (in seconds) to wait for response on each packet before concluding the packet is lost.")
         ->default_str(std::to_string(args.timeout));
     app.add_option("-s, --seed", args.seed, "Seed for the RNG. 0 means random.");
     app.add_flag("--print-digest{true}", args.print_digest, "Prints a statistical summary at the end.");
@@ -48,29 +52,25 @@ static auto parse_args(int argc, char **argv) -> Args
     app.add_option(
         "--runtime",
         args.runtime,
-        "Run for this number of seconds before terminating. This option overrides the -n (--num_samples) option.");
-    app.add_flag(
-        "--sync{true}",
-        args.sync_time,
-        "Disables time synchronization mechanism. Not RFC-compatible, so disable to make this work with other TWAMP implementations.");
+        "Send packets for this number of seconds. The total runtime will depend on RTT, but is limited to the sum of the runtime and timeout parameters. This option overrides the -n (--num_samples) option.");
     app.add_option("-i, --mean_inter_packet_delay",
-                   args.mean_inter_packet_delay,
+                   args.mean_inter_packet_delay_ms,
                    "The mean inter-packet delay in milliseconds.")
-        ->default_str(std::to_string(args.mean_inter_packet_delay));
+        ->default_str(std::to_string(args.mean_inter_packet_delay_ms));
     app.add_flag("--constant-inter-packet-delay",
                  args.constant_inter_packet_delay,
                  "The constant inter-packet delay in milliseconds. Overrides the default Poisson traffic pattern.");
     uint8_t tos = 0;
-    auto opt_tos = app.add_option("-T, --tos", tos, "The TOS value (<256).")
-                       ->check(CLI::Range(256))
-                       ->default_str(std::to_string(args.snd_tos));
+    auto *opt_tos = app.add_option("-T, --tos", tos, "The TOS value (<256).")
+                        ->check(CLI::Range(256))
+                        ->default_str(std::to_string(args.snd_tos));
     app.add_flag("-V{true}, --version{true}", print_version, "Print Version info");
 
     std::vector<std::string> ipPortStrs;
     app.add_option("addresses", ipPortStrs, "IPs and Ports in the format IP:Port")
         ->check([&args](const std::string &str) {
             std::string ip;
-            uint16_t port;
+            uint16_t port = 0;
             if (args.ip_version == IPV6) {
                 if (!parseIPv6Port(str, ip, port)) {
                     return "Address must be in the format IP:Port";
@@ -80,7 +80,7 @@ static auto parse_args(int argc, char **argv) -> Args
                     return "Address must be in the format IP:Port";
                 }
             }
-            args.remote_hosts.push_back(ip);
+            args.remote_hosts.push_back(std::move(ip));
             args.remote_ports.push_back(port);
             return "";
         });
@@ -117,6 +117,12 @@ int main(int argc, char **argv)
 {
     try {
         Args args = parse_args(argc, argv);
+        if (args.runtime > 0 && args.num_samples > 0) {
+            std::cout
+                << "Both --runtime and --num_samples options are set. Ignoring --num_samples and using --runtime instead."
+                << std::endl;
+            args.num_samples = 0;
+        }
         Client client = Client(args);
         std::thread receiver_thread(&Client::runReceiverThread, &client);
         std::thread sender_thread(&Client::runSenderThread, &client);

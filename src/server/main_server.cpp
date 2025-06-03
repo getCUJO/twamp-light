@@ -8,7 +8,7 @@ static auto parse_args(int argc, char **argv)
     Args args{};
     uint8_t tos = 0;
     std::string title = "Twamp-Light implementation written by Domos. Version " + std::string(TWAMP_VERSION_TXT);
-    CLI::App app{title};
+    CLI::App app{std::move(title)};
     app.option_defaults()->always_capture_default(true);
     app.add_option("-a, --local_address",
                    args.local_host,

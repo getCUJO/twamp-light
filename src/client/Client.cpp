@@ -141,8 +141,11 @@ void Client::runSenderThread()
     constexpr double MAX_DELAY_MICROSECONDS = 10000000.0; // Maximum delay in microseconds
     std::exponential_distribution<> d(1.0 / (static_cast<double>(args.mean_inter_packet_delay_ms) *
                                              MICROSECONDS_IN_MILLISECOND)); // Lambda is 1.0/mean (in microseconds)
-    while (args.num_samples == 0 || index < args.num_samples ||
-           (args.runtime != 0 && (uint64_t) time(nullptr) - this->start_time < args.runtime)) {
+    while (args.num_samples == 0 || index < args.num_samples || args.runtime != 0) {
+        if (args.runtime != 0 && (uint64_t) time(nullptr) - this->start_time >= args.runtime) {
+            // If runtime is set, stop sending packets after the specified time
+            break;
+        }
         size_t payload_len = (size_t) *select_randomly(args.payload_lens.begin(), args.payload_lens.end(), args.seed);
         uint32_t delay = 0;
         if (args.constant_inter_packet_delay) {
@@ -177,12 +180,13 @@ void Client::runSenderThread()
     packets from the server side.*/
 void Client::runReceiverThread()
 {
-    /* run forever if num_samples is 0, 
-    otherwise run until all packets have been received (or timed out) */
-    while ((args.num_samples == 0 || this->sending_completed == 0 ||
-            (this->received_packets < this->sent_packets &&
-             (uint64_t) time(nullptr) - this->sending_completed < args.timeout))) {
-        awaitAndHandleResponse();
+    /* run until all packets have been received (or timed out) */
+    while (this->sending_completed == 0 || (this->received_packets < this->sent_packets &&
+                                            (uint64_t) time(nullptr) - this->sending_completed < args.timeout)) {
+        if (!awaitAndHandleResponse()) {
+            // If no response was received, check if the oldest packet should be processed
+            check_if_oldest_packet_should_be_processed();
+        }
     }
 }
 
@@ -339,31 +343,41 @@ void Client::printRawDataHeader()
 
 int64_t calculate_correction(RawData **first_entry, RawData **last_entry)
 {
-    // Naive implementation that assumes no clock drift and symmetrical links
-    int64_t min_fwd = INT64_MAX;
-    int64_t min_bwd = INT64_MAX;
-    RawData **current_entry = first_entry;
-    while (current_entry <= last_entry) {
-        RawData *entry = *current_entry;
-        int64_t fwd = entry->server_receive_epoch_nanoseconds - entry->client_send_epoch_nanoseconds;
-        if (fwd < min_fwd) {
-            min_fwd = fwd;
-        }
-        int64_t bwd = entry->client_receive_epoch_nanoseconds - entry->server_send_epoch_nanoseconds;
-        if (bwd < min_bwd) {
-            min_bwd = bwd;
-        }
-        current_entry++;
+    // Compute the delays (without clock correction), and add them to the sqa_stats
+    timespec client_server_delay = {};
+    if (oldest_raw_data->getClientSendEpochNanoseconds() > 0 &&
+        oldest_raw_data->getServerReceiveEpochNanoseconds() > 0) {
+        client_server_delay = nanosecondsToTimespec(oldest_raw_data->getServerReceiveEpochNanoseconds() -
+                                                    oldest_raw_data->getClientSendEpochNanoseconds());
+        sqa_stats_add_sample(this->stats_client_server, &client_server_delay);
     }
-    // Calculate the correction. How must the server side clock change to make the min delays equal?
-    uint64_t corrected_min_owd = (min_fwd + min_bwd) / 2;
-    // If the server side clock is ahead of the client side clock, fwd will appear too large and bwd will appear too small.
-    // If the server side clock is behind the client side clock, fwd will appear too small and bwd will appear too large.
-    // The equation we need to solve is:
-    // fwd = bwd = rtt/2
-    // (server_receive + correction) - client_send = client_receive - (server_send + correction) = rtt/2
-    int64_t correction = corrected_min_owd - min_fwd;
-    return correction;
+    timespec server_client_delay = {};
+    timespec internal_delay{};
+    if (oldest_raw_data->getServerSendEpochNanoseconds() > 0 &&
+        oldest_raw_data->getClientReceiveEpochNanoseconds() > 0 &&
+        oldest_raw_data->getServerReceiveEpochNanoseconds() > 0 &&
+        oldest_raw_data->getClientSendEpochNanoseconds() > 0) {
+        server_client_delay = nanosecondsToTimespec(oldest_raw_data->getClientReceiveEpochNanoseconds() -
+                                                    oldest_raw_data->getServerSendEpochNanoseconds());
+        sqa_stats_add_sample(this->stats_server_client, &server_client_delay);
+        internal_delay = nanosecondsToTimespec(oldest_raw_data->getServerSendEpochNanoseconds() -
+                                               oldest_raw_data->getServerReceiveEpochNanoseconds());
+        sqa_stats_add_sample(this->stats_internal, &internal_delay);
+
+    } else {
+        // We don't know where the packet was lost, so update all loss counters
+        sqa_stats_count_loss(this->stats_client_server);
+        sqa_stats_count_loss(this->stats_internal);
+        sqa_stats_count_loss(this->stats_server_client);
+        sqa_stats_count_loss(this->stats_RTT);
+    }
+
+    timespec rtt_delay{};
+
+    tspecplus(&client_server_delay, &server_client_delay, &rtt_delay);
+    if (tspecmsec(&rtt_delay) != 0) {
+        sqa_stats_add_sample(this->stats_RTT, &rtt_delay);
+    }
 }
 
 void Client::aggregateRawData(RawData *oldest_raw_data)
@@ -798,7 +812,7 @@ template <typename Func> void Client::printSummaryLine(const std::string &label,
     std::ios::fmtflags f = os.flags();
     std::streamsize prec = os.precision();
     char fill = os.fill();
-    os << " " << std::left << std::setw(10) << label << std::setprecision(6);
+    os << " " << std::left << std::setw(10) << label << std::setprecision(6) << std::fixed;
     os << func(this->stats_RTT) << " s      ";
     os << func(this->stats_client_server) << " s      ";
     os << func(this->stats_server_client) << " s      ";
@@ -833,14 +847,22 @@ void Client::printStats(int packets_sent)
     os << "Packet loss: " << sqa_stats_get_loss_percentage(Client::stats_RTT) << "%\n";
     os << "           RTT             FWD             BWD             Internal\n";
     (void) fflush(stdout);
+    // Restore format state
+    os.flags(f);
+    os.precision(prec);
+    os.fill(fill);
 
     auto printPercentileLine = [&](const std::string &label, double percentile) {
-        os << " " << std::left << std::setw(10) << label << std::setprecision(6);
+        os << " " << std::left << std::setw(10) << label << std::setprecision(6) << std::fixed;
         os << sqa_stats_get_percentile(Client::stats_RTT, percentile) << " s      ";
         os << sqa_stats_get_percentile(Client::stats_client_server, percentile) << " s      ";
         os << sqa_stats_get_percentile(Client::stats_server_client, percentile) << " s      ";
         os << sqa_stats_get_percentile(Client::stats_internal, percentile) << " s\n";
         (void) fflush(stdout);
+        // Restore format state
+        os.flags(f);
+        os.precision(prec);
+        os.fill(fill);
     };
 
     printSummaryLine("mean:", sqa_stats_get_mean);
@@ -855,10 +877,6 @@ void Client::printStats(int packets_sent)
     printPercentileLine("p95:", PERCENTILE_95);
     printPercentileLine("p99:", PERCENTILE_99);
     printPercentileLine("p99.9:", PERCENTILE_99_9);
-    // Restore format state
-    os.flags(f);
-    os.precision(prec);
-    os.fill(fill);
 }
 
 static auto td_to_json(td_histogram_t *histogram) -> nlohmann::json
@@ -902,24 +920,38 @@ static auto map_tos_to_traffic_class(uint8_t tos) -> std::string
 void Client::JsonLog(std::string json_output_file)
 {
     nlohmann::json logData;
-    time_t first_sent_seconds = Client::first_packet_sent_epoch_nanoseconds / 1e9;
-    int microseconds = Client::first_packet_sent_epoch_nanoseconds % 1000000000;
-    auto now_as_tm_date = std::gmtime(&first_sent_seconds);
-    char first_packet_sent_date[80];
-    strftime(first_packet_sent_date, sizeof(first_packet_sent_date), "%Y-%m-%dT%H:%M:%S", now_as_tm_date);
+    auto first_sent_seconds =
+        static_cast<time_t>(Client::first_packet_sent_epoch_nanoseconds / static_cast<uint64_t>(NANOSECONDS_IN_SECOND));
+    uint64_t microseconds = Client::first_packet_sent_epoch_nanoseconds % NANOSECONDS_IN_MICROSECOND;
+    auto *now_as_tm_date = std::gmtime(&first_sent_seconds);
+    constexpr size_t DATE_BUFFER_SIZE = 80;
+    std::array<char, DATE_BUFFER_SIZE> first_packet_sent_date{};
+    if (strftime(first_packet_sent_date.data(), first_packet_sent_date.size(), "%Y-%m-%dT%H:%M:%S", now_as_tm_date) ==
+        0) {
+        throw std::runtime_error("Error formatting date");
+    }
     // Add the microseconds back in:
-    char first_packet_sent_date_with_microseconds[91];
-    sprintf(first_packet_sent_date_with_microseconds, "%s.%06dZ", first_packet_sent_date, microseconds);
-    long duration_nanoseconds =
+    constexpr size_t FIRST_PACKET_SENT_DATE_WITH_MICROSECONDS_SIZE = 91;
+    std::array<char, FIRST_PACKET_SENT_DATE_WITH_MICROSECONDS_SIZE> first_packet_sent_date_with_microseconds{};
+    std::ostringstream oss;
+    oss << first_packet_sent_date.data() << "." << std::setfill('0') << std::setw(6) << microseconds << "Z";
+    std::string formatted_date = oss.str();
+    if (formatted_date.size() >= first_packet_sent_date_with_microseconds.size()) {
+        throw std::runtime_error("Error formatting date with microseconds");
+    }
+    std::strncpy(first_packet_sent_date_with_microseconds.data(),
+                 formatted_date.c_str(),
+                 first_packet_sent_date_with_microseconds.size());
+    uint64_t duration_nanoseconds =
         (Client::last_packet_received_epoch_nanoseconds - Client::first_packet_sent_epoch_nanoseconds);
-    double duration = duration_nanoseconds / 1e9;
+    double duration = static_cast<double>(duration_nanoseconds) / static_cast<double>(NANOSECONDS_IN_SECOND);
     // Describe the sampling pattern
     nlohmann::json samplingpattern;
     samplingpattern["type"] = "Erlang-k";
-    samplingpattern["k"] = 1;
-    samplingpattern["mean"] = args.mean_inter_packet_delay / 1000.0;
+    samplingpattern["mean"] = (double) args.mean_inter_packet_delay_ms / MILLISECONDS_IN_SECOND;
     samplingpattern["min"] = 0;
-    samplingpattern["max"] = 10.0;
+    constexpr double MAX_SAMPLING_PATTERN_DELAY = 10.0;
+    samplingpattern["max"] = MAX_SAMPLING_PATTERN_DELAY;
     logData["sampling_pattern"] = samplingpattern;
     // Describe the packet size distribution
     logData["packet_sizes"] = nlohmann::json::array();
@@ -942,7 +974,7 @@ void Client::JsonLog(std::string json_output_file)
 
     logData["version"] = "0.1";
     logData["qualityattenuationaggregate"] = {
-        {"t0", first_packet_sent_date_with_microseconds},
+        {"t0", std::string(first_packet_sent_date_with_microseconds.data())},
         {"duration", duration},
         {"num_samples", sqa_stats_get_number_of_samples(Client::stats_RTT)},
         {"num_lost_samples", sqa_stats_get_number_of_lost_packets(Client::stats_RTT)},

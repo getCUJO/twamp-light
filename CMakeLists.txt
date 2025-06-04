@@ -50,13 +50,13 @@ endif ()
 find_package (Threads)
 
 add_subdirectory(qoo-c)
+add_subdirectory(third_party/CLI11)
+add_subdirectory(third_party/json)
 
 set(COMMON_SOURCES
         include/utils.hpp
-        include/system/CLI11.hpp
         src/utils.cpp
         include/packets.h
-        include/system/json.hpp
 )
 
 set(CLIENT_TARGET twamp-light-client)
@@ -84,8 +84,8 @@ src/server/main_server.cpp
 ${COMMON_SOURCES}
 )
 
-target_link_libraries(${CLIENT_TARGET} PRIVATE qoo_static ${EXTRA_LIBS} Threads::Threads)
-target_link_libraries(${SERVER_TARGET} PRIVATE ${EXTRA_LIBS})
+target_link_libraries(${CLIENT_TARGET} PRIVATE qoo_static CLI11::CLI11 nlohmann_json::nlohmann_json ${EXTRA_LIBS} Threads::Threads)
+target_link_libraries(${SERVER_TARGET} PRIVATE CLI11::CLI11 ${EXTRA_LIBS})
 target_include_directories(
         ${CLIENT_TARGET} PRIVATE
 )

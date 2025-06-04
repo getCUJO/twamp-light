@@ -2,13 +2,13 @@
 // Created by vladim0105 on 12/15/21.
 //
 #include "Client.h"
-#include "CLI11.hpp"
+#include <CLI/CLI.hpp>
 #include <csignal>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
-#include <json.hpp>
+#include <nlohmann/json.hpp>
 #include <thread>
 #include <unistd.h>
 

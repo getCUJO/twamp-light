@@ -366,7 +366,7 @@ auto Client::sendPacket(uint32_t idx, size_t payload_len) -> Timestamp
         }
         this->sent_packets += 1;
     }
-    return ntohts(senderPacket.send_time_data);
+    return ntohts(senderPacket.timestamp);
 }
 
 auto Client::craftSenderPacket(uint32_t idx) -> ClientPacket
@@ -374,9 +374,9 @@ auto Client::craftSenderPacket(uint32_t idx) -> ClientPacket
     constexpr uint16_t ERROR_ESTIMATE_DEFAULT_BITMAP = 0x8001; // Sync = 1, Multiplier = 1
     ClientPacket packet = {};
     packet.seq_number = htonl(idx);
-    packet.error_estimate = htons(ERROR_ESTIMATE_DEFAULT_BITMAP); // Sync = 1, Multiplier = 1.
+    packet.timestamp_error_estimate = htons(ERROR_ESTIMATE_DEFAULT_BITMAP); // Sync = 1, Multiplier = 1.
     auto ts = get_timestamp();
-    packet.send_time_data = htonts(ts);
+    packet.timestamp = htonts(ts);
     return packet;
 }
 
@@ -431,9 +431,9 @@ static auto computeTimeData(uint64_t client_receive_time, ReflectorPacket *refle
         std::cerr << "Client receive time is too large. Clock must be wrong or it's the year 2262."
                   << client_receive_time << std::endl;
     }
-    auto client_timestamp = ntohts(reflectorPacket->client_time_data);
-    auto server_timestamp = ntohts(reflectorPacket->server_time_data);
-    auto send_timestamp = ntohts(reflectorPacket->send_time_data);
+    auto client_timestamp = ntohts(reflectorPacket->timestamp);
+    auto server_timestamp = ntohts(reflectorPacket->receive_timestamp);
+    auto send_timestamp = ntohts(reflectorPacket->sender_timestamp);
 
     timeData.client_send_time = timestamp_to_nsec(&client_timestamp);
     timeData.server_receive_time = timestamp_to_nsec(&server_timestamp);
@@ -512,8 +512,8 @@ void Client::handleReflectorPacket(ReflectorPacket *reflectorPacket,
     }
     last_packet_received_epoch_nanoseconds = incoming_timestamp_nanoseconds;
 
-    Timestamp server_receive_time = ntohts(reflectorPacket->server_time_data);
-    Timestamp server_send_time = ntohts(reflectorPacket->send_time_data);
+    Timestamp server_receive_time = ntohts(reflectorPacket->receive_timestamp);
+    Timestamp server_send_time = ntohts(reflectorPacket->timestamp);
     //IPHeader ipHeader = get_ip_header(msghdr);
     //uint8_t tos = ipHeader.tos;
     // sockaddr_in *sock = ((sockaddr_in *)msghdr.msg_name);

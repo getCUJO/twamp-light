@@ -122,9 +122,9 @@ void Server::handleTestPacket(ClientPacket *packet, msghdr sender_msg, ssize_t p
     uint64_t server_send_time = 0;
     uint64_t initial_send_time = 0;
     int64_t client_server_delay = 0;
-    Timestamp client_timestamp = ntohts(packet->send_time_data);
-    Timestamp server_timestamp = ntohts(reflector_packet.server_time_data);
-    Timestamp send_timestamp = ntohts(reflector_packet.send_time_data);
+    Timestamp client_timestamp = ntohts(packet->timestamp);
+    Timestamp server_timestamp = ntohts(reflector_packet.receive_timestamp);
+    Timestamp send_timestamp = ntohts(reflector_packet.timestamp);
     client_server_delay = (int64_t) (timestamp_to_nsec(&server_timestamp) - timestamp_to_nsec(&client_timestamp));
     server_receive_time = timestamp_to_nsec(&server_timestamp);
     server_send_time = timestamp_to_nsec(&send_timestamp);
@@ -169,18 +169,18 @@ auto Server::craftReflectorPacket(ClientPacket *clientPacket, msghdr sender_msg,
         timespec_to_timestamp(incoming_timestamp, &server_timestamp);
     }
     ReflectorPacket packet = {};
-    packet.server_time_data = htonts(server_timestamp);
     packet.seq_number = clientPacket->seq_number;
+    Timestamp send_timestamp = get_timestamp();
+    packet.timestamp = htonts(send_timestamp);
+    packet.timestamp_error_estimate =
+        htons(ERROR_ESTIMATE_DEFAULT_BITMAP); // Sync = 1, Multiplier = 1 Taken from TWAMP C implementation.
+    packet.receive_timestamp = htonts(server_timestamp);
     packet.sender_seq_number = clientPacket->seq_number;
-    packet.sender_error_estimate = clientPacket->error_estimate;
+    packet.sender_timestamp = clientPacket->timestamp;
+    packet.sender_error_estimate = clientPacket->timestamp_error_estimate;
     IPHeader ipHeader = get_ip_header(sender_msg);
     packet.sender_ttl = ipHeader.ttl;
     packet.sender_tos = ipHeader.tos;
-    packet.error_estimate =
-        htons(ERROR_ESTIMATE_DEFAULT_BITMAP); // Sync = 1, Multiplier = 1 Taken from TWAMP C implementation.
-    packet.client_time_data = clientPacket->send_time_data;
-    Timestamp send_timestamp = get_timestamp();
-    packet.send_time_data = htonts(send_timestamp);
 
     return packet;
 }

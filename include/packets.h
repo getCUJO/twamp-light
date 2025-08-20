@@ -18,20 +18,20 @@ struct Timestamp {
 /* Session-Sender TWAMP-Test packet for Unauthenticated mode */
 struct ClientPacket {
     uint32_t seq_number = 0;
-    Timestamp send_time_data = {};
-    uint16_t error_estimate = 0;
+    Timestamp timestamp = {};
+    uint16_t timestamp_error_estimate = 0;
     std::array<uint8_t, TST_PKT_SIZE - 14> padding{};
 };
 
 /* Session-Reflector TWAMP-Test packet for Unauthenticated mode */
 struct ReflectorPacket {
     uint32_t seq_number = 0;
-    Timestamp client_time_data = {};
-    uint16_t error_estimate = 0;
+    Timestamp timestamp = {};
+    uint16_t timestamp_error_estimate = 0;
     std::array<uint8_t, 2> mbz1{};
-    Timestamp server_time_data = {};
+    Timestamp receive_timestamp = {};
     uint32_t sender_seq_number = 0;
-    Timestamp send_time_data = {};
+    Timestamp sender_timestamp = {};
     uint16_t sender_error_estimate = 0;
     std::array<uint8_t, 2> mbz2{};
     uint8_t sender_ttl = 0;

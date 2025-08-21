@@ -431,13 +431,13 @@ static auto computeTimeData(uint64_t client_receive_time, ReflectorPacket *refle
         std::cerr << "Client receive time is too large. Clock must be wrong or it's the year 2262."
                   << client_receive_time << std::endl;
     }
-    auto client_timestamp = ntohts(reflectorPacket->timestamp);
-    auto server_timestamp = ntohts(reflectorPacket->receive_timestamp);
-    auto send_timestamp = ntohts(reflectorPacket->sender_timestamp);
+    auto client_timestamp = ntohts(reflectorPacket->sender_timestamp);
+    auto server_receive_timestamp = ntohts(reflectorPacket->receive_timestamp);
+    auto server_sender_timestamp = ntohts(reflectorPacket->timestamp);
 
     timeData.client_send_time = timestamp_to_nsec(&client_timestamp);
-    timeData.server_receive_time = timestamp_to_nsec(&server_timestamp);
-    timeData.server_send_time = timestamp_to_nsec(&send_timestamp);
+    timeData.server_receive_time = timestamp_to_nsec(&server_receive_timestamp);
+    timeData.server_send_time = timestamp_to_nsec(&server_sender_timestamp);
     if (timeData.server_send_time > MAXINT64) {
         // Issue a warning if the server send time is too large
         std::cerr << "Server send time is too large. Clock must be wrong or it's the year 2262."

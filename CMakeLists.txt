@@ -53,6 +53,14 @@ add_subdirectory(qoo-c)
 add_subdirectory(third_party/CLI11)
 add_subdirectory(third_party/json)
 
+# Google Test for unit testing
+if (RUN_TESTS)
+  set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+  set(BUILD_GMOCK OFF CACHE BOOL "" FORCE)
+  set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
+  add_subdirectory(third_party/googletest)
+endif()
+
 set(COMMON_SOURCES
         include/utils.hpp
         src/utils.cpp
@@ -102,6 +110,52 @@ if (BASH_PROGRAM)
                 COMMAND ${BASH_PROGRAM} ${CMAKE_CURRENT_SOURCE_DIR}/tests/valgrind_test_ipv6.sh)
         add_test (NAME test_memory_collator 
                 COMMAND ${BASH_PROGRAM} ${CMAKE_CURRENT_SOURCE_DIR}/tests/valgrind_test_collator.sh)
+        # Integration tests for CLI flags and output formats
+        add_test (NAME test_cli_flags
+                COMMAND ${BASH_PROGRAM} ${CMAKE_CURRENT_SOURCE_DIR}/tests/integration/test_cli_flags.sh)
+        add_test (NAME test_output_formats
+                COMMAND ${BASH_PROGRAM} ${CMAKE_CURRENT_SOURCE_DIR}/tests/integration/test_output_formats.sh)
+        add_test (NAME test_edge_cases
+                COMMAND ${BASH_PROGRAM} ${CMAKE_CURRENT_SOURCE_DIR}/tests/integration/test_edge_cases.sh)
+endif()
+
+# Unit tests with Google Test
+if (RUN_TESTS)
+        # Create a library with common sources for testing
+        add_library(twamp_common_lib STATIC
+                src/utils.cpp
+                include/utils.hpp
+                include/packets.h
+                include/packetlist.h
+        )
+        target_include_directories(twamp_common_lib PUBLIC
+                ${CMAKE_CURRENT_SOURCE_DIR}/include
+                SYSTEM ${CMAKE_CURRENT_SOURCE_DIR}/include/system
+        )
+
+        # Unit test for utilities
+        add_executable(test_utils tests/unit/test_utils.cpp)
+        target_link_libraries(test_utils PRIVATE twamp_common_lib gtest_main)
+        target_include_directories(test_utils PRIVATE
+                ${CMAKE_CURRENT_SOURCE_DIR}/include
+        )
+        add_test(NAME test_utils COMMAND test_utils)
+
+        # Unit test for packet structures
+        add_executable(test_packets tests/unit/test_packets.cpp)
+        target_link_libraries(test_packets PRIVATE twamp_common_lib gtest_main)
+        target_include_directories(test_packets PRIVATE
+                ${CMAKE_CURRENT_SOURCE_DIR}/include
+        )
+        add_test(NAME test_packets COMMAND test_packets)
+
+        # Unit test for observation list and raw data
+        add_executable(test_packetlist tests/unit/test_packetlist.cpp)
+        target_link_libraries(test_packetlist PRIVATE twamp_common_lib gtest_main Threads::Threads)
+        target_include_directories(test_packetlist PRIVATE
+                ${CMAKE_CURRENT_SOURCE_DIR}/include
+        )
+        add_test(NAME test_packetlist COMMAND test_packetlist)
 endif()
         
 install(TARGETS ${CLIENT_TARGET} ${SERVER_TARGET} 

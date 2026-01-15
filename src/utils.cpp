@@ -182,10 +182,13 @@ void get_kernel_timestamp(struct msghdr incoming_msg, struct timespec *incoming_
         if (cm->cmsg_level != SOL_SOCKET)
             continue;
         switch (cm->cmsg_type) {
+        // coverity[Y2K38_SAFETY:FALSE_POSITIVE] Kernel socket API requires timespec (contains time_t)
         case SO_TIMESTAMPNS:
+        // coverity[Y2K38_SAFETY:FALSE_POSITIVE] Kernel socket API requires timespec (contains time_t)
         case SO_TIMESTAMPING:
             memcpy(incoming_timestamp, static_cast<void *>(CMSG_DATA(cm)), sizeof(struct timespec));
             break;
+        // coverity[Y2K38_SAFETY:FALSE_POSITIVE] Kernel socket API requires timeval (contains time_t)
         case SO_TIMESTAMP: {
             struct timeval tv {};
             memcpy(&tv, static_cast<void *>(CMSG_DATA(cm)), sizeof(struct timeval));
@@ -208,15 +211,18 @@ void set_socket_options(int socket, uint8_t ip_ttl, uint8_t timeout_secs)
     int result = 0;
 
     /* Set Timeout */
+    // coverity[Y2K38_SAFETY:FALSE_POSITIVE] Socket SO_RCVTIMEO API requires timeval (contains time_t)
     struct timeval timeout = {timeout_secs, 0}; // set timeout for 2 seconds
     /* Enable socket timestamping and set the timestamp resolution to nanoseconds */
     int flags = 1;
+    // coverity[Y2K38_SAFETY:FALSE_POSITIVE] Socket SO_TIMESTAMPNS API involves timespec (contains time_t)
     if (setsockopt(socket, SOL_SOCKET, SO_TIMESTAMPNS, &flags, sizeof(flags)) < 0)
         std::cerr << "ERROR: setsockopt SO_TIMESTAMPNS" << std::endl;
 
         /* Set receive UDP message timeout value */
 #ifdef SO_RCVTIMEO
     if (timeout_secs != 0) {
+        // coverity[Y2K38_SAFETY:FALSE_POSITIVE] Socket SO_RCVTIMEO API requires timeval (contains time_t)
         result = setsockopt(socket, SOL_SOCKET, SO_RCVTIMEO, static_cast<void *>(&timeout), sizeof(struct timeval));
         if (result != 0) {
             std::cerr << "[PROBLEM] Cannot set the timeout value for reception." << std::endl;

@@ -14,6 +14,27 @@
 #include <vector>
 
 constexpr int HDR_TTL = 255; /* TTL=255 in TWAMP for IP Header */
+constexpr int64_t NSEC_PER_SEC = 1000000000LL;
+
+/**
+ * @brief Safely add two timespec values with overflow protection.
+ *
+ * Unlike the tspecplus macro from qoo-c, this function uses int64_t
+ * for intermediate calculations to prevent integer overflow when
+ * adding tv_nsec values (fixes Coverity INTEGER_OVERFLOW).
+ */
+inline void safe_tspecplus(const timespec *a, const timespec *b, timespec *result)
+{
+    result->tv_sec = a->tv_sec + b->tv_sec;
+    // Use int64_t to prevent overflow during addition
+    int64_t nsec = static_cast<int64_t>(a->tv_nsec) + static_cast<int64_t>(b->tv_nsec);
+    while (nsec >= NSEC_PER_SEC) {
+        ++result->tv_sec;
+        nsec -= NSEC_PER_SEC;
+    }
+    result->tv_nsec = static_cast<long>(nsec);
+}
+
 constexpr int SERVER_PORT = 862;
 constexpr int CHECK_TIMES = 100;
 constexpr int IPV4 = 4;

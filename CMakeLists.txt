@@ -4,15 +4,10 @@ project(twamp-light)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
-set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -Wextra -Wall -Werror")
-set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -Wextra -Wall -Werror")
 set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -Wextra -Wall -O0 -g")
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -Wextra -Wall -O0 -g")
 # write a compile_commands.json file for clangd
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-# set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wno-psabi" )
-# set(CMAKE_CXX_FLAGS_RELEASE "-Werror -O2")
-set(USE_CUJO_GCC ON)
 include(cmake/getversion.cmake)
 
 option(SYSTEMD_UNIT "Include Systemd unit in install" ON)
@@ -21,17 +16,6 @@ option(RUN_TESTS "Build and run tests" ON)
 option(USE_LEGACY_TIMESTAMP_IN_CLIENT "Build without NIC timestamping in the client" OFF)
 if (USE_LEGACY_TIMESTAMP_IN_CLIENT)
   add_definitions(-DKERNEL_TIMESTAMP_DISABLED_IN_CLIENT)
-endif ()
-
-if (USE_CUJO_GCC)
-  # the Wno-error flag is there such that it doesn't exit on the first file where it trips on an analyzer warning. 
-  string(REPLACE "-Werror" "" CMAKE_C_FLAGS "${CMAKE_C_FLAGS}")
-  string(REPLACE "-Werror" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
-  string(REPLACE "-Werror" "" CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG}")
-  string(REPLACE "-Werror" "" CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG}")
-  set(CUJO_GCC_FLAGS " -Wall -Wextra -Wdouble-promotion '-Wformat=2' '-Wformat-overflow=2' -Wformat-signedness '-Wformat-truncation=2' '-Wshift-overflow=2' -Wsync-nand '-Wstrict-overflow=2' '-Wsuggest-attribute=format' '-Wsuggest-attribute=noreturn' -Walloc-zero -Walloca '-Warray-bounds=2' '-Wattribute-alias=2' -Wduplicated-branches -Wduplicated-cond -Wtrampolines -Wfloat-equal '-Wshadow=compatible-local' -Wpointer-arith -Wundef -Wunused-macros '-Wcast-align=strict' -Wwrite-strings -Wconversion -Wlogical-op -Wpacked -Wredundant-decls -Wvla -Wno-unknown-pragmas -Wbad-function-cast -Wstrict-prototypes -Wmissing-prototypes -Wnested-externs")
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${CUJO_GCC_FLAGS}")
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CUJO_GCC_FLAGS}")
 endif ()
 
 if (RUN_TESTS)
@@ -48,6 +32,11 @@ if (USE_ASAN)
 endif ()
 
 find_package (Threads)
+
+# Disable tests in qoo-c submodule if RUN_TESTS is disabled
+if(NOT RUN_TESTS)
+  set(BUILD_TESTS OFF CACHE BOOL "Build tests" FORCE)
+endif()
 
 add_subdirectory(qoo-c)
 add_subdirectory(third_party/CLI11)

@@ -838,8 +838,11 @@ static auto map_tos_to_traffic_class(uint8_t tos) -> std::string
 void Client::JsonLog(const std::string &json_output_file)
 {
     nlohmann::json logData;
-    auto first_sent_seconds =
-        static_cast<time_t>(Client::first_packet_sent_epoch_nanoseconds / static_cast<uint64_t>(NANOSECONDS_IN_SECOND));
+    // Use std::chrono for safer time handling (C++20 guarantees Unix epoch)
+    auto first_sent_time = std::chrono::system_clock::time_point{
+        std::chrono::nanoseconds{Client::first_packet_sent_epoch_nanoseconds}};
+    // coverity[Y2K38_SAFETY:FALSE_POSITIVE] std::chrono::to_time_t returns time_t by design; using chrono for clarity
+    auto first_sent_seconds = std::chrono::system_clock::to_time_t(first_sent_time);
     uint64_t microseconds = Client::first_packet_sent_epoch_nanoseconds % NANOSECONDS_IN_MICROSECOND;
     auto *now_as_tm_date = std::gmtime(&first_sent_seconds);
     constexpr size_t DATE_BUFFER_SIZE = 80;

@@ -64,7 +64,7 @@ pipeline {
     post {
         always {
             junit allowEmptyResults: true, testResults: 'build/test-results/*.xml'
-            sh 'pkill -f twamp-light || true'
+            // sh 'pkill -f twamp-light || true'
         }
         failure {
             echo 'Build or tests failed!'

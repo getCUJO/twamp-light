@@ -89,6 +89,18 @@ Client::Client(const Args &args) : start_time((uint64_t) time(nullptr)), raw_dat
         std::cerr << strerror(errno) << std::endl;
         throw std::runtime_error("Failed to bind socket: " + std::string(strerror(errno)));
     }
+    // Query the actual bound port (important when binding to port 0)
+    struct sockaddr_storage bound_addr {};
+    socklen_t bound_addr_len = sizeof(bound_addr);
+    if (getsockname(fd, reinterpret_cast<struct sockaddr *>(&bound_addr), &bound_addr_len) == 0) {
+        uint16_t actual_port = 0;
+        if (args.ip_version == IPV4) {
+            actual_port = ntohs(reinterpret_cast<struct sockaddr_in *>(&bound_addr)->sin_port);
+        } else {
+            actual_port = ntohs(reinterpret_cast<struct sockaddr_in6 *>(&bound_addr)->sin6_port);
+        }
+        this->args.local_port = std::to_string(actual_port);
+    }
     // Initialize the stats
     stats_RTT = sqa_stats_create();
     if (stats_RTT == nullptr) {
@@ -335,7 +347,8 @@ void Client::aggregateRawData(const std::shared_ptr<RawData> &oldest_raw_data)
     timespec rtt_delay{};
 
     safe_tspecplus(&client_server_delay, &server_client_delay, &rtt_delay);
-    if (tspecmsec(&rtt_delay) != 0) {
+    // Check if RTT is positive (not just >= 1ms) to handle sub-millisecond RTTs
+    if (rtt_delay.tv_sec > 0 || rtt_delay.tv_nsec > 0) {
         sqa_stats_add_sample(this->stats_RTT, &rtt_delay);
     }
 }

@@ -14,6 +14,8 @@
  */
 
 #include "utils.hpp"
+#include <sys/time.h>
+#include <time.h>
 #include "cstdlib"
 #include <cmath>
 #include <cstdint>
@@ -68,7 +70,7 @@ void timestamp_to_timeval(const Timestamp *ts, struct timeval *tv)
     ts_host_ord.integer = (ts->integer);
     ts_host_ord.fractional = (ts->fractional);
     tv->tv_sec = ts_host_ord.integer - NTP_EPOCH_OFFSET;
-    tv->tv_usec = (__suseconds_t) ((double) ts_host_ord.fractional * MICROSECONDS_IN_SECOND / (double) (1ULL << 32));
+    tv->tv_usec = (suseconds_t) ((double) ts_host_ord.fractional * MICROSECONDS_IN_SECOND / (double) (1ULL << 32));
 }
 
 static void timestamp_to_timespec(const Timestamp *ts, struct timespec *tv)
@@ -83,7 +85,7 @@ static void timestamp_to_timespec(const Timestamp *ts, struct timespec *tv)
 
     /* NTP to Unix time */
     tv->tv_sec = ts_host_ord.integer - NTP_EPOCH_OFFSET;
-    tv->tv_nsec = (__syscall_slong_t) ((double) ts_host_ord.fractional * NANOSECONDS_IN_SECOND / (double) (1ULL << 32));
+    tv->tv_nsec = (long) ((double) ts_host_ord.fractional * NANOSECONDS_IN_SECOND / (double) (1ULL << 32));
 }
 
 auto get_timestamp() -> Timestamp
@@ -111,8 +113,8 @@ auto timestamp_to_nsec(const Timestamp *ts) -> uint64_t
 
 auto nanosecondsToTimespec(uint64_t delay_epoch_nanoseconds) -> struct timespec {
     struct timespec ts {};
-    ts.tv_sec = static_cast<__time_t>(delay_epoch_nanoseconds / NANOSECONDS_IN_SECOND_INT);
-    ts.tv_nsec = static_cast<__syscall_slong_t>(delay_epoch_nanoseconds % NANOSECONDS_IN_SECOND_INT);
+    ts.tv_sec = static_cast<time_t>(delay_epoch_nanoseconds / NANOSECONDS_IN_SECOND_INT);
+    ts.tv_nsec = static_cast<long>(delay_epoch_nanoseconds % NANOSECONDS_IN_SECOND_INT);
     return ts;
 }
 

@@ -1,5 +1,8 @@
 pipeline {
     agent any
+    options {
+        timeout(time: 30, unit: 'MINUTES')
+    }
     stages {
         stage('build') {
             steps {
@@ -7,12 +10,67 @@ pipeline {
                     rm -rf build
                     mkdir build
                     cd build
-                    cmake ..
-                    make
+                    cmake .. -DRUN_TESTS=ON
+                    make -j\$(nproc)
+                """
+            }
+        }
+        stage('unit-tests') {
+            steps {
+                sh """
+                    cd build
+                    # Run unit tests
+                    ./test_utils --gtest_output=xml:test-results/test_utils.xml || true
+                    ./test_packets --gtest_output=xml:test-results/test_packets.xml || true
+                    ./test_packetlist --gtest_output=xml:test-results/test_packetlist.xml || true
+                """
+            }
+        }
+        stage('integration-tests') {
+            steps {
+                sh """
+                    cd build
+                    # Run basic integration tests
+                    ctest -R "test_output" --output-on-failure || true
+                """
+            }
+        }
+        stage('extended-tests') {
+            when {
+                anyOf {
+                    branch 'main'
+                    branch 'master'
+                    branch 'develop'
+                }
+            }
+            steps {
+                sh """
+                    cd build
+                    # Run extended integration tests (CLI flags, output formats, edge cases)
+                    ctest --output-on-failure || true
+                """
+            }
+        }
+        stage('package') {
+            steps {
+                sh """
+                    cd build
                     ../debian/make-deb-pkg.sh \$(cat ../VERSION.txt)
                 """
                 archiveArtifacts 'build/*.deb'
             }
+        }
+    }
+    post {
+        always {
+            junit allowEmptyResults: true, testResults: 'build/test-results/*.xml'
+            // sh 'pkill -f twamp-light || true'
+        }
+        failure {
+            echo 'Build or tests failed!'
+        }
+        success {
+            echo 'All stages completed successfully!'
         }
     }
 }

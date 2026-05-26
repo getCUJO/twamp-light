@@ -13,6 +13,13 @@ include(cmake/getversion.cmake)
 option(SYSTEMD_UNIT "Include Systemd unit in install" ON)
 option(USE_ASAN "Build with address-sanitizer" OFF)
 option(RUN_TESTS "Build and run tests" ON)
+option(BUILD_TWAMP_CLIENT "Build the TWAMP light client" ON)
+option(BUILD_TWAMP_SERVER "Build the TWAMP light server" ON)
+
+if (NOT BUILD_TWAMP_CLIENT AND NOT BUILD_TWAMP_SERVER)
+  message(FATAL_ERROR "At least one of BUILD_TWAMP_CLIENT or BUILD_TWAMP_SERVER must be ON")
+endif ()
+
 option(USE_LEGACY_TIMESTAMP_IN_CLIENT "Build without NIC timestamping in the client" OFF)
 if (USE_LEGACY_TIMESTAMP_IN_CLIENT)
   add_definitions(-DKERNEL_TIMESTAMP_DISABLED_IN_CLIENT)
@@ -38,9 +45,6 @@ if(NOT RUN_TESTS)
   set(BUILD_TESTS OFF CACHE BOOL "Build tests" FORCE)
 endif()
 
-add_subdirectory(qoo-c)
-add_subdirectory(third_party/CLI11)
-add_subdirectory(third_party/json)
 
 # Google Test for unit testing
 if (RUN_TESTS)
@@ -51,9 +55,23 @@ if (RUN_TESTS)
 endif()
 
 set(COMMON_SOURCES
-        include/utils.hpp
-        src/utils.cpp
-        include/packets.h
+    include/utils.hpp
+    src/utils.cpp
+    include/packets.h
+)
+
+set(CLIENT_SOURCES
+    src/client/Client.cpp
+    include/Client.h
+    src/client/main_client.cpp
+    ${COMMON_SOURCES}
+)
+
+set(SERVER_SOURCES
+    src/server/Server.cpp
+    include/Server.h
+    src/server/main_server.cpp
+    ${COMMON_SOURCES}
 )
 
 set(CLIENT_TARGET twamp-light-client)
@@ -67,25 +85,23 @@ include_directories(
         SYSTEM ${CMAKE_CURRENT_SOURCE_DIR}/qoo-c/t-digest-c/src
 )
 
-add_executable(${CLIENT_TARGET}
-src/client/Client.cpp
-include/Client.h
-src/client/main_client.cpp
-${COMMON_SOURCES}
-)
+add_subdirectory(third_party/CLI11)
 
-add_executable(${SERVER_TARGET}
-src/server/Server.cpp
-include/Server.h
-src/server/main_server.cpp
-${COMMON_SOURCES}
-)
+if (BUILD_TWAMP_CLIENT)
+    add_subdirectory(qoo-c)
+    add_subdirectory(third_party/json)
+    add_executable(${CLIENT_TARGET} ${CLIENT_SOURCES})
+    target_link_libraries(${CLIENT_TARGET} PRIVATE qoo_static CLI11::CLI11 nlohmann_json::nlohmann_json ${EXTRA_LIBS} Threads::Threads)
+    target_include_directories( ${CLIENT_TARGET} PRIVATE )
+    install(TARGETS ${CLIENT_TARGET} RUNTIME DESTINATION bin)
+endif()
 
-target_link_libraries(${CLIENT_TARGET} PRIVATE qoo_static CLI11::CLI11 nlohmann_json::nlohmann_json ${EXTRA_LIBS} Threads::Threads)
-target_link_libraries(${SERVER_TARGET} PRIVATE CLI11::CLI11 ${EXTRA_LIBS})
-target_include_directories(
-        ${CLIENT_TARGET} PRIVATE
-)
+if (BUILD_TWAMP_SERVER)
+    add_executable(${SERVER_TARGET} ${SERVER_SOURCES})
+    target_link_libraries(${SERVER_TARGET} PRIVATE CLI11::CLI11 ${EXTRA_LIBS})
+    install(TARGETS ${SERVER_TARGET} RUNTIME DESTINATION bin)
+endif()
+
 
 find_program (BASH_PROGRAM bash)
 if (BASH_PROGRAM)
@@ -147,8 +163,6 @@ if (RUN_TESTS)
         add_test(NAME test_packetlist COMMAND test_packetlist)
 endif()
         
-install(TARGETS ${CLIENT_TARGET} ${SERVER_TARGET} 
-        RUNTIME DESTINATION bin)
 
 if (SYSTEMD_UNIT) 
 	install(FILES systemd/twamp-light-server.service DESTINATION /lib/systemd/system) 

@@ -33,10 +33,6 @@ git push origin v$version
 gh release create "v$version" --title "v$version" --generate-notes
 ```
 
-5. Create a GitHub release:
-   ```bash
-   ```
-
 6. Merge the PR into `main`.
 
 ```

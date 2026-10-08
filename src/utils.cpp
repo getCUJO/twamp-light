@@ -159,7 +159,13 @@ auto get_ip_header(msghdr hdr) -> IPHeader
 
         case IPPROTO_IPV6:
             if (c_msg->cmsg_type == IPV6_HOPLIMIT) {
-                ttl = *static_cast<uint8_t *> CMSG_DATA(c_msg);
+                int hop_limit = 0;
+                memcpy(&hop_limit, CMSG_DATA(c_msg), sizeof(hop_limit));
+                ttl = static_cast<uint8_t>(hop_limit);
+            } else if (c_msg->cmsg_type == IPV6_TCLASS) {
+                int traffic_class = 0;
+                memcpy(&traffic_class, CMSG_DATA(c_msg), sizeof(traffic_class));
+                tos = static_cast<uint8_t>(traffic_class);
             } else {
                 std::cerr << "\tWarning, unexpected data of level " << c_msg->cmsg_level << " and type "
                           << c_msg->cmsg_type << std::endl;
@@ -235,6 +241,27 @@ void set_socket_options(int socket, uint8_t ip_ttl, uint8_t timeout_secs)
     fprintf(stderr, "No way to set the timeout value for incoming packets on that platform.\n");
 #endif
 
+    struct sockaddr address = {};
+    socklen_t address_length = sizeof(address);
+    if (getsockname(socket, &address, &address_length) != 0) {
+        std::cerr << "[PROBLEM] Cannot determine the socket address family.\n";
+        return;
+    }
+    if (address.sa_family == AF_INET6) {
+        int hop_limit = ip_ttl;
+        int enabled = 1;
+        if (setsockopt(socket, IPPROTO_IPV6, IPV6_UNICAST_HOPS, &hop_limit, sizeof(hop_limit)) != 0) {
+            std::cerr << "[PROBLEM] Cannot set the hop limit value for emission.\n";
+        }
+        if (setsockopt(socket, IPPROTO_IPV6, IPV6_RECVHOPLIMIT, &enabled, sizeof(enabled)) != 0) {
+            std::cerr << "[PROBLEM] Cannot set the socket option for hop limit reception.\n";
+        }
+        if (setsockopt(socket, IPPROTO_IPV6, IPV6_RECVTCLASS, &enabled, sizeof(enabled)) != 0) {
+            std::cerr << "[PROBLEM] Cannot set the socket option for traffic class reception.\n";
+        }
+        return;
+    }
+
     /* Set IPTTL value to twamp standard: 255 */
 #ifdef IP_TTL
     result = setsockopt(socket, IPPROTO_IP, IP_TTL, &ip_ttl, sizeof(ip_ttl));
@@ -276,6 +303,20 @@ void set_socket_tos(int socket, uint8_t ip_tos)
 {
     /* Set socket options : IP_TOS */
     int result = 0;
+
+    struct sockaddr address = {};
+    socklen_t address_length = sizeof(address);
+    if (getsockname(socket, &address, &address_length) != 0) {
+        std::cerr << "[PROBLEM] Cannot determine the socket address family.\n";
+        return;
+    }
+    if (address.sa_family == AF_INET6) {
+        int traffic_class = ip_tos;
+        if (setsockopt(socket, IPPROTO_IPV6, IPV6_TCLASS, &traffic_class, sizeof(traffic_class)) != 0) {
+            std::cerr << "[PROBLEM] Cannot set the traffic class value for emission.\n";
+        }
+        return;
+    }
 
     /* Set IP TOS value */
 #ifdef IP_TOS

@@ -1,9 +1,9 @@
 #!/bin/bash
 set -e
-stdbuf -o0 ./twamp-light-server -n 10 --ip 6 -P 4200 &>server_output.txt &
+stdbuf -o0 ./twamp-light-server -n 10 --ip 6 -P 4200 -T 40 &>server_output.txt &
 server_pid=$!
 sleep 1
-stdbuf -o0 ./twamp-light-client -i 10 --ip 6 -n 10 localhost:4200 &>client_output.txt &
+stdbuf -o0 ./twamp-light-client -i 10 --ip 6 -n 10 -T 184 localhost:4200 &>client_output.txt &
 client_pid=$!
 wait $client_pid
 if pgrep $server_pid; then pkill $server_pid; fi
@@ -27,6 +27,9 @@ awk -F, 'NR>1 && NF!=12 {print "Field count mismatch on line", NR; exit 1}' serv
 
 # Use awk to check the IP field of each row, excluding the header row
 awk -F, 'NR>1 && $2!="::1" {print "IP mismatch on line", NR; exit 1}' server_output.txt
+
+awk -F, 'NR>1 && ($7!=255 || $8!=184) {print "Received hop limit or traffic class mismatch on line", NR; exit 1}
+         END {if (NR!=11) {print "Server sample count mismatch"; exit 1}}' server_output.txt
 
 # Use awk to check if the Time field is numeric, excluding the header row
 awk -F, 'NR>1 && $1 !~ /^[0-9]+$/ {print "Non-numeric Time value on line", NR; exit 1}' server_output.txt
@@ -53,6 +56,9 @@ awk -F, 'NR>1 && NF!=17 {print "Field count mismatch on line", NR; exit 1}' clie
 
 # Validate the IP field values, excluding the header row
 awk -F, 'NR>1 && $2!="::1" {print "IP mismatch on line", NR; exit 1}' client_output.txt
+
+awk -F, 'NR>1 && ($8!=255 || $9!=255 || $10!=184 || $11!=184 || $12!=40) {print "Reflected hop limit or traffic class mismatch on line", NR; exit 1}
+         END {if (NR!=11) {print "Client sample count mismatch"; exit 1}}' client_output.txt
 
 # Check if the Time field is numeric, excluding the header row
 awk -F, 'NR>1 && $1 !~ /^[0-9]+$/ {print "Non-numeric Time value on line", NR; exit 1}' client_output.txt

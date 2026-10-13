@@ -49,8 +49,8 @@ Server::Server(const Args &args) : args(args)
         std::exit(EXIT_FAILURE);
     }
     // Setup the socket options, to be able to receive TTL and TOS
-    set_socket_options(fd, HDR_TTL, args.timeout);
-    set_socket_tos(fd, args.snd_tos);
+    set_socket_options(fd, HDR_TTL, args.timeout, res->ai_family);
+    set_socket_tos(fd, args.snd_tos, res->ai_family);
     // Bind the socket
     if (bind(fd, res->ai_addr, res->ai_addrlen) == -1) {
         std::cerr << strerror(errno) << std::endl;

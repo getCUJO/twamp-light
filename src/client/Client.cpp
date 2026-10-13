@@ -82,8 +82,8 @@ Client::Client(const Args &args) : start_time((uint64_t) time(nullptr)), raw_dat
         throw std::runtime_error("Failed to create socket: " + std::string(strerror(errno)));
     }
     // Setup the socket options, to be able to receive TTL and TOS
-    set_socket_options(fd, HDR_TTL, args.timeout);
-    set_socket_tos(fd, args.snd_tos);
+    set_socket_options(fd, HDR_TTL, args.timeout, remote_address_info[0]->ai_family);
+    set_socket_tos(fd, args.snd_tos, remote_address_info[0]->ai_family);
     // Bind the socket to a local port
     if (bind(fd, local_address_info->ai_addr, local_address_info->ai_addrlen) == -1) {
         std::cerr << strerror(errno) << std::endl;

@@ -141,8 +141,14 @@ auto get_ip_header(msghdr hdr) -> IPHeader
 #ifndef NO_MESSAGE_CONTROL
     struct cmsghdr *c_msg = nullptr;
     for (c_msg = CMSG_FIRSTHDR(&hdr); c_msg != nullptr; c_msg = (CMSG_NXTHDR(&hdr, c_msg))) {
+        size_t offset = reinterpret_cast<unsigned char *>(c_msg) - static_cast<unsigned char *>(hdr.msg_control);
+        if (c_msg->cmsg_len < CMSG_LEN(0) || c_msg->cmsg_len > hdr.msg_controllen - offset)
+            break;
+        size_t payload_length = c_msg->cmsg_len - CMSG_LEN(0);
         switch (c_msg->cmsg_level) {
         case IPPROTO_IP:
+            if (payload_length < sizeof(uint8_t))
+                break;
             switch (c_msg->cmsg_type) {
             case IP_TTL:
                 ttl = *static_cast<uint8_t *>(CMSG_DATA(c_msg));
@@ -157,14 +163,33 @@ auto get_ip_header(msghdr hdr) -> IPHeader
             }
             break;
 
-        case IPPROTO_IPV6:
-            if (c_msg->cmsg_type == IPV6_HOPLIMIT) {
-                ttl = *static_cast<uint8_t *> CMSG_DATA(c_msg);
+        case IPPROTO_IPV6: {
+            int value = 0;
+            if (payload_length >= sizeof(value)) {
+                memcpy(&value, CMSG_DATA(c_msg), sizeof(value));
+            } else if (payload_length == sizeof(uint8_t)) {
+                value = *static_cast<uint8_t *>(CMSG_DATA(c_msg));
             } else {
+                break;
+            }
+            switch (c_msg->cmsg_type) {
+#ifdef IPV6_HOPLIMIT
+            case IPV6_HOPLIMIT:
+                ttl = static_cast<uint8_t>(value);
+                break;
+#endif
+#ifdef IPV6_TCLASS
+            case IPV6_TCLASS:
+                tos = static_cast<uint8_t>(value);
+                break;
+#endif
+            default:
                 std::cerr << "\tWarning, unexpected data of level " << c_msg->cmsg_level << " and type "
                           << c_msg->cmsg_type << std::endl;
+                break;
             }
             break;
+        }
 
         default:
             break;
@@ -206,7 +231,7 @@ void get_kernel_timestamp(struct msghdr incoming_msg, struct timespec *incoming_
     }
 }
 
-void set_socket_options(int socket, uint8_t ip_ttl, uint8_t timeout_secs)
+void set_socket_options(int socket, uint8_t ip_ttl, uint8_t timeout_secs, int family)
 {
     /* Set socket options : timeout, IPTTL, IP_RECVTTL, IP_RECVTOS */
     uint8_t One = 1;
@@ -234,6 +259,34 @@ void set_socket_options(int socket, uint8_t ip_ttl, uint8_t timeout_secs)
 #else
     fprintf(stderr, "No way to set the timeout value for incoming packets on that platform.\n");
 #endif
+
+    if (family == AF_INET6) {
+#ifdef IPV6_UNICAST_HOPS
+        int hop_limit = ip_ttl;
+        if (setsockopt(socket, IPPROTO_IPV6, IPV6_UNICAST_HOPS, &hop_limit, sizeof(hop_limit)) != 0) {
+            std::cerr << "[PROBLEM] Cannot set the hop limit value for emission.\n";
+        }
+#else
+        fprintf(stderr, "No way to set the hop limit value for leaving packets on that platform.\n");
+#endif
+#if defined(IPV6_RECVHOPLIMIT) || defined(IPV6_RECVTCLASS)
+        int enabled = 1;
+#endif
+#ifdef IPV6_RECVHOPLIMIT
+        if (setsockopt(socket, IPPROTO_IPV6, IPV6_RECVHOPLIMIT, &enabled, sizeof(enabled)) != 0) {
+            std::cerr << "[PROBLEM] Cannot set the socket option for hop limit reception.\n";
+        }
+#else
+        fprintf(stderr, "No way to ask for the hop limit of incoming packets on that platform.\n");
+#endif
+#ifdef IPV6_RECVTCLASS
+        if (setsockopt(socket, IPPROTO_IPV6, IPV6_RECVTCLASS, &enabled, sizeof(enabled)) != 0) {
+            std::cerr << "[PROBLEM] Cannot set the socket option for traffic class reception.\n";
+        }
+#else
+        fprintf(stderr, "No way to ask for the traffic class of incoming packets on that platform.\n");
+#endif
+    }
 
     /* Set IPTTL value to twamp standard: 255 */
 #ifdef IP_TTL
@@ -272,10 +325,21 @@ void set_socket_options(int socket, uint8_t ip_ttl, uint8_t timeout_secs)
     fprintf(stderr, "No way to ask for the TOS of incoming packets on that platform.\n");
 #endif
 }
-void set_socket_tos(int socket, uint8_t ip_tos)
+void set_socket_tos(int socket, uint8_t ip_tos, int family)
 {
     /* Set socket options : IP_TOS */
     int result = 0;
+
+    if (family == AF_INET6) {
+#ifdef IPV6_TCLASS
+        int traffic_class = ip_tos;
+        if (setsockopt(socket, IPPROTO_IPV6, IPV6_TCLASS, &traffic_class, sizeof(traffic_class)) != 0) {
+            std::cerr << "[PROBLEM] Cannot set the traffic class value for emission.\n";
+        }
+#else
+        fprintf(stderr, "No way to set the traffic class value for leaving packets on that platform.\n");
+#endif
+    }
 
     /* Set IP TOS value */
 #ifdef IP_TOS

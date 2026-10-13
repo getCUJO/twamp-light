@@ -5,8 +5,130 @@
 #include <gtest/gtest.h>
 #include "utils.hpp"
 #include "packets.h"
+#include <array>
 #include <cstring>
 #include <limits>
+#include <netinet/in.h>
+#include <unistd.h>
+
+class SocketOptionsTest : public ::testing::TestWithParam<int> {
+protected:
+    int fd = -1;
+
+    void SetUp() override {
+        fd = socket(GetParam(), SOCK_DGRAM, 0);
+        ASSERT_GE(fd, 0);
+        if (GetParam() == AF_INET6) {
+            int disabled = 0;
+            ASSERT_EQ(setsockopt(fd, IPPROTO_IPV6, IPV6_V6ONLY, &disabled, sizeof(disabled)), 0);
+        }
+    }
+
+    void TearDown() override {
+        if (fd != -1)
+            close(fd);
+    }
+
+    void ExpectOption(int level, int option, int expected) {
+        int value = 0;
+        socklen_t length = sizeof(value);
+        ASSERT_EQ(getsockopt(fd, level, option, &value, &length), 0);
+        EXPECT_EQ(value, expected) << "Socket option " << option;
+    }
+};
+
+TEST_P(SocketOptionsTest, ConfiguresUnboundSocket) {
+    set_socket_options(fd, 61, 1, GetParam());
+    set_socket_tos(fd, 184, GetParam());
+
+    ExpectOption(IPPROTO_IP, IP_TTL, 61);
+    ExpectOption(IPPROTO_IP, IP_TOS, 184);
+    ExpectOption(IPPROTO_IP, IP_RECVTTL, 1);
+    ExpectOption(IPPROTO_IP, IP_RECVTOS, 1);
+    if (GetParam() == AF_INET6) {
+#ifdef IPV6_UNICAST_HOPS
+        ExpectOption(IPPROTO_IPV6, IPV6_UNICAST_HOPS, 61);
+#endif
+#ifdef IPV6_TCLASS
+        ExpectOption(IPPROTO_IPV6, IPV6_TCLASS, 184);
+#endif
+#ifdef IPV6_RECVHOPLIMIT
+        ExpectOption(IPPROTO_IPV6, IPV6_RECVHOPLIMIT, 1);
+#endif
+#ifdef IPV6_RECVTCLASS
+        ExpectOption(IPPROTO_IPV6, IPV6_RECVTCLASS, 1);
+#endif
+    }
+}
+
+INSTANTIATE_TEST_SUITE_P(AddressFamilies, SocketOptionsTest, ::testing::Values(AF_INET, AF_INET6));
+
+#if defined(IPV6_HOPLIMIT) && defined(IPV6_TCLASS)
+class IPHeaderTest : public ::testing::TestWithParam<int> {
+protected:
+    alignas(cmsghdr) std::array<unsigned char, CMSG_SPACE(sizeof(int))> control{};
+    msghdr message{};
+    cmsghdr *header = nullptr;
+
+    void SetUp() override {
+        message.msg_control = control.data();
+        message.msg_controllen = control.size();
+        header = CMSG_FIRSTHDR(&message);
+        header->cmsg_level = IPPROTO_IPV6;
+        header->cmsg_type = GetParam();
+    }
+
+    void ExpectValue(uint8_t value) {
+        IPHeader result = get_ip_header(message);
+        EXPECT_EQ(result.ttl, GetParam() == IPV6_HOPLIMIT ? value : 255);
+        EXPECT_EQ(result.tos, GetParam() == IPV6_TCLASS ? value : 0);
+    }
+
+    void ExpectDefaults() {
+        IPHeader result = get_ip_header(message);
+        EXPECT_EQ(result.ttl, 255);
+        EXPECT_EQ(result.tos, 0);
+    }
+};
+
+TEST_P(IPHeaderTest, IntegerPayload) {
+    int value = 184;
+    std::memcpy(CMSG_DATA(header), &value, sizeof(value));
+    header->cmsg_len = CMSG_LEN(sizeof(value));
+    ExpectValue(184);
+}
+
+TEST_P(IPHeaderTest, BytePayload) {
+    *CMSG_DATA(header) = 40;
+    header->cmsg_len = CMSG_LEN(1);
+    ExpectValue(40);
+}
+
+TEST_P(IPHeaderTest, EmptyPayload) {
+    header->cmsg_len = CMSG_LEN(0);
+    ExpectDefaults();
+}
+
+TEST_P(IPHeaderTest, ShortIntegerPayload) {
+    std::memset(CMSG_DATA(header), 184, sizeof(int));
+    header->cmsg_len = CMSG_LEN(2);
+    ExpectDefaults();
+}
+
+TEST_P(IPHeaderTest, TruncatedControlBuffer) {
+    header->cmsg_len = CMSG_LEN(sizeof(int));
+    message.msg_controllen = CMSG_LEN(1);
+    message.msg_flags = MSG_CTRUNC;
+    ExpectDefaults();
+}
+
+TEST_P(IPHeaderTest, InvalidControlLength) {
+    header->cmsg_len = 0;
+    ExpectDefaults();
+}
+
+INSTANTIATE_TEST_SUITE_P(IPv6Options, IPHeaderTest, ::testing::Values(IPV6_HOPLIMIT, IPV6_TCLASS));
+#endif
 
 // ============================================================================
 // Tests for parseIPPort()

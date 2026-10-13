@@ -58,8 +58,8 @@ auto get_usec() -> uint64_t;
 auto get_timestamp() -> Timestamp;
 
 auto get_ip_header(msghdr hdr) -> IPHeader;
-void set_socket_options(int socket, uint8_t ip_ttl, uint8_t timeout_secs);
-void set_socket_tos(int socket, uint8_t ip_tos);
+void set_socket_options(int socket, uint8_t ip_ttl, uint8_t timeout_secs, int family);
+void set_socket_tos(int socket, uint8_t ip_tos, int family);
 void get_kernel_timestamp(struct msghdr incoming_msg, struct timespec *incoming_timestamp);
 auto isWithinEpsilon(double a, double b, double percentEpsilon) -> bool;
 template <class T> auto vectorToString(std::vector<T> vec, const std::string &sep) -> std::string

@@ -60,6 +60,19 @@ pipeline {
                 archiveArtifacts 'build/*.deb'
             }
         }
+        stage('package-arm64') {
+            steps {
+                sh """
+                    rm -rf build-arm64
+                    cmake -S . -B build-arm64 -DCMAKE_TOOLCHAIN_FILE=toolchain-aarch64-linux-gnu.cmake \
+                        -DCMAKE_BUILD_TYPE=Release -DRUN_TESTS=OFF
+                    cmake --build build-arm64 -j\$(nproc)
+                    cd build-arm64
+                    ../debian/make-deb-pkg.sh \$(cat ../VERSION.txt) arm64
+                """
+                archiveArtifacts 'build-arm64/*.deb'
+            }
+        }
     }
     post {
         always {

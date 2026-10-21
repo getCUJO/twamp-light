@@ -1,18 +1,21 @@
 #!/bin/bash
+set -euo pipefail
 VER=$1
-mkdir -p twamp-light-$VER/usr/local/bin
-mkdir -p twamp-light-$VER/lib/systemd/system
-mkdir -p twamp-light-$VER/usr/local/lib
-mkdir twamp-light-$VER/DEBIAN
-cp ../debian/control.txt twamp-light-$VER/DEBIAN/control
-cp ../debian/triggers.txt twamp-light-$VER/DEBIAN/triggers
-cp ../debian/postinst.sh twamp-light-$VER/DEBIAN/postinst
+ARCH=${2:-$(dpkg --print-architecture)}
+PKG=twamp-light_${VER}_${ARCH}
+mkdir -p $PKG/usr/local/bin
+mkdir -p $PKG/lib/systemd/system
+mkdir -p $PKG/usr/local/lib
+mkdir $PKG/DEBIAN
+cp ../debian/control.txt $PKG/DEBIAN/control
+cp ../debian/triggers.txt $PKG/DEBIAN/triggers
+cp ../debian/postinst.sh $PKG/DEBIAN/postinst
 
-sed -i '/Version: 1.0.0/c\Version: '"$VER"'' twamp-light-$VER/DEBIAN/control
+sed -i -e "s/^Version: .*/Version: $VER/" -e "s/^Architecture: .*/Architecture: $ARCH/" $PKG/DEBIAN/control
 
-cp twamp-light-client twamp-light-$VER/usr/local/bin
-cp qoo-c/src/libqoo.so twamp-light-$VER/usr/local/lib/libqoo.so
-cp twamp-light-server twamp-light-$VER/usr/local/bin
-cp ../systemd/twamp-light-server.service twamp-light-$VER/lib/systemd/system
+cp twamp-light-client $PKG/usr/local/bin
+cp qoo-c/src/libqoo.so $PKG/usr/local/lib/libqoo.so
+cp twamp-light-server $PKG/usr/local/bin
+cp ../systemd/twamp-light-server.service $PKG/lib/systemd/system
 
-dpkg-deb --build twamp-light-$VER
+dpkg-deb --build $PKG

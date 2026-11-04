@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <memory>
 #include <queue>
+#include <netdb.h>
 #include <semaphore.h>
 #include <string>
 #include <vector>
@@ -30,9 +31,10 @@ constexpr uint32_t DEFAULT_MEAN_INTER_PACKET_DELAY = 200;
 struct Args {
     std::vector<std::string> remote_hosts{};
     std::vector<uint16_t> remote_ports{};
+    std::vector<int> remote_families{}; // IPV4 or IPV6 per remote host
     std::string local_host{};
     std::string local_port = "0";
-    uint8_t ip_version = 4;
+    uint8_t ip_version = 0; // 0 = detect the family per address, 4/6 = force it for all addresses
     std::vector<int16_t> payload_lens = {PAYLOAD_LEN_50,
                                          PAYLOAD_LEN_250,
                                          PAYLOAD_LEN_450,
@@ -191,6 +193,13 @@ struct MetricData {
     IPHeader ipHeader;
 };
 
+struct ClientSocket {
+    int fd = -1;
+    int family = 0;
+    struct addrinfo *local_address_info = nullptr;
+    std::string local_port{};
+};
+
 class Client {
   public:
     explicit Client(const Args &args);
@@ -220,7 +229,6 @@ class Client {
     void JsonLog(const std::string &json_output_file);
 
   private:
-    int fd = -1;
     int sent_packets = 0;
     int received_packets = 0;
     int32_t last_received_packet_id = -1;
@@ -232,7 +240,8 @@ class Client {
     pthread_mutex_t observation_list_mutex = PTHREAD_MUTEX_INITIALIZER;
     ObservationList observation_list = {};
     std::vector<struct addrinfo *> remote_address_info = {};
-    struct addrinfo *local_address_info = {};
+    std::vector<int> remote_families = {};
+    std::vector<ClientSocket> sockets = {}; // One socket per IP family used by the targets
     struct sqa_stats *stats_RTT;
     struct sqa_stats *stats_internal;
     struct sqa_stats *stats_client_server;
@@ -242,15 +251,18 @@ class Client {
     uint64_t last_packet_sent_epoch_nanoseconds = 0;
     uint64_t last_packet_received_epoch_nanoseconds = 0;
     Args args;
+    auto socketFor(int family) -> ClientSocket *;
     static auto craftSenderPacket(uint32_t idx) -> ClientPacket;
     void printStat(const char *statName, sqa_stats *statType);
 
     void handleReflectorPacket(ReflectorPacket *reflectorPacket,
+                               const ClientSocket &sock,
                                msghdr msghdr,
                                ssize_t payload_len,
                                timespec *incoming_timestamp);
 
     void printReflectorPacket(ReflectorPacket *reflectorPacket,
+                              const ClientSocket &sock,
                               msghdr msghdr,
                               ssize_t payload_len,
                               uint64_t incoming_timestamp_nanoseconds,

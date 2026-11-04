@@ -593,6 +593,45 @@ TEST(GetUsecTest, MonotonicallyIncreasing) {
 }
 
 // ============================================================================
+// Tests for parseAddressPort() (mixed IPv4 / IPv6 address lists)
+// ============================================================================
+
+class ParseAddressPortTest : public ::testing::Test {
+protected:
+    std::string ip;
+    uint16_t port = 0;
+    int family = 0;
+};
+
+TEST_F(ParseAddressPortTest, IPv4) {
+    EXPECT_TRUE(parseAddressPort("10.0.0.1:4200", ip, port, family));
+    EXPECT_EQ(ip, "10.0.0.1");
+    EXPECT_EQ(port, 4200);
+    EXPECT_EQ(family, IPV4);
+}
+
+TEST_F(ParseAddressPortTest, IPv6) {
+    EXPECT_TRUE(parseAddressPort("::1:4200", ip, port, family));
+    EXPECT_EQ(ip, "::1");
+    EXPECT_EQ(port, 4200);
+    EXPECT_EQ(family, IPV6);
+}
+
+TEST_F(ParseAddressPortTest, FullIPv6) {
+    EXPECT_TRUE(parseAddressPort("2001:db8:85a3::8a2e:370:7334:8080", ip, port, family));
+    EXPECT_EQ(ip, "2001:db8:85a3::8a2e:370:7334");
+    EXPECT_EQ(family, IPV6);
+}
+
+TEST_F(ParseAddressPortTest, Invalid) {
+    EXPECT_FALSE(parseAddressPort("10.0.0.1", ip, port, family));
+    EXPECT_FALSE(parseAddressPort("::1:0", ip, port, family));
+    EXPECT_FALSE(parseAddressPort("::1:65536", ip, port, family));
+    EXPECT_FALSE(parseAddressPort("not:an:address:4200", ip, port, family));
+    EXPECT_FALSE(parseAddressPort("", ip, port, family));
+}
+
+// ============================================================================
 // Main
 // ============================================================================
 

@@ -144,6 +144,10 @@ auto main(int argc, char **argv) -> int
         if (!args.json_output_file.empty() && args.print_format != "legacy") {
             client.JsonLog(args.json_output_file);
         }
+        if (packets_sent == 0) {
+            std::cerr << "No packets could be sent to any target." << std::endl;
+            return EXIT_FAILURE;
+        }
         return 0;
     } catch (const CLI::BadNameString &e) {
         std::cerr << "Invalid argument: " << e.what() << std::endl;

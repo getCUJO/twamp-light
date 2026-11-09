@@ -81,6 +81,7 @@ Client::Client(const Args &args) : start_time((uint64_t) time(nullptr)), raw_dat
         std::cerr << "No targets could be resolved." << std::endl;
         std::exit(EXIT_FAILURE);
     }
+    last_send_errno.assign(remote_address_info.size(), 0);
     this->args.remote_hosts = std::move(kept_hosts);
     this->args.remote_ports = std::move(kept_ports);
     this->args.remote_families = std::move(kept_families);
@@ -418,7 +419,8 @@ auto Client::sendPacket(uint32_t idx, size_t payload_len) -> Timestamp
     std::array<struct iovec, 1> iov{};
     iov[0].iov_base = &senderPacket;
     iov[0].iov_len = payload_len;
-    for (const auto *rai : remote_address_info) {
+    for (size_t i = 0; i < remote_address_info.size(); i++) {
+        const auto *rai = remote_address_info[i];
         ClientSocket *sock = socketFor(rai->ai_family == AF_INET ? IPV4 : IPV6);
         struct msghdr message = {};
         message.msg_name = rai->ai_addr;
@@ -428,9 +430,14 @@ auto Client::sendPacket(uint32_t idx, size_t payload_len) -> Timestamp
         message.msg_control = nullptr;
         message.msg_controllen = 0;
         if (sendmsg(sock->fd, &message, 0) == -1) {
-            std::cerr << "WARNING: sending to target failed: " << strerror(errno) << std::endl;
+            if (last_send_errno[i] != errno) {
+                last_send_errno[i] = errno;
+                std::cerr << "WARNING: sending to " << args.remote_hosts[i] << ":" << args.remote_ports[i]
+                          << " failed: " << strerror(errno) << std::endl;
+            }
             continue;
         }
+        last_send_errno[i] = 0;
         this->sent_packets += 1;
     }
     return ntohts(senderPacket.timestamp);

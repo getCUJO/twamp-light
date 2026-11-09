@@ -241,6 +241,7 @@ class Client {
     ObservationList observation_list = {};
     std::vector<struct addrinfo *> remote_address_info = {};
     std::vector<int> remote_families = {};
+    std::vector<int> last_send_errno = {}; // Per target, to warn once per distinct send error
     std::vector<ClientSocket> sockets = {}; // One socket per IP family used by the targets
     struct sqa_stats *stats_RTT;
     struct sqa_stats *stats_internal;

@@ -23,7 +23,7 @@ jobs:
       - name: Install dependencies
         run: sudo apt-get update && sudo apt-get install -y cmake g++ valgrind
       - name: Configure
-        run: cmake -S . -B build -DRUN_TESTS=ON
+        run: cmake -S . -B build -DRUN_TESTS=ON -DCMAKE_POLICY_VERSION_MINIMUM=3.5
       - name: Build
         run: cmake --build build -j"$(nproc)"
       - name: Test

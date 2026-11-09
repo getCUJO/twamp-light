@@ -21,7 +21,7 @@ jobs:
         with:
           submodules: recursive
       - name: Install dependencies
-        run: sudo apt-get update && sudo apt-get install -y cmake g++ valgrind
+        run: sudo apt-get update && sudo apt-get install -y cmake g++ valgrind libcmocka-dev
       - name: Configure
         run: cmake -S . -B build -DRUN_TESTS=ON -DCMAKE_POLICY_VERSION_MINIMUM=3.5
       - name: Build

@@ -33,10 +33,12 @@ using Clock = std::chrono::system_clock;
 
 Client::Client(const Args &args) : start_time((uint64_t) time(nullptr)), raw_data_list(), args(args)
 {
-    // Resize the remote_address_info vector based on the number of remote hosts
-    remote_address_info.resize(args.remote_hosts.size());
-    size_t i = 0;
-    for (const auto &remote_host : args.remote_hosts) {
+    // Targets that cannot be resolved are skipped with a warning, so the remaining ones are still measured
+    std::vector<std::string> kept_hosts;
+    std::vector<uint16_t> kept_ports;
+    std::vector<int> kept_families;
+    for (size_t i = 0; i < args.remote_hosts.size(); i++) {
+        const auto &remote_host = args.remote_hosts[i];
         int family = args.ip_version;
         if (i < args.remote_families.size()) {
             family = args.remote_families[i];
@@ -53,7 +55,7 @@ Client::Client(const Args &args) : start_time((uint64_t) time(nullptr)), raw_dat
         }
         hints.ai_socktype = SOCK_DGRAM;
         hints.ai_protocol = 0;
-        hints.ai_flags = AI_PASSIVE | AI_ADDRCONFIG;
+        hints.ai_flags = AI_PASSIVE;
         std::string port;
         try {
             // Convert port number to string
@@ -62,14 +64,26 @@ Client::Client(const Args &args) : start_time((uint64_t) time(nullptr)), raw_dat
             std::cerr << "Not enough remote ports provided" << std::endl;
             std::exit(EXIT_FAILURE);
         }
-        int err = getaddrinfo(remote_host.c_str(), port.c_str(), &hints, &remote_address_info[i]);
+        struct addrinfo *resolved = nullptr;
+        int err = getaddrinfo(remote_host.c_str(), port.c_str(), &hints, &resolved);
         if (err != 0) {
-            std::cerr << "failed to resolve remote socket address: " << err;
-            std::exit(EXIT_FAILURE);
+            std::cerr << "WARNING: skipping target " << remote_host << ":" << port
+                      << ", failed to resolve remote socket address: " << gai_strerror(err) << std::endl;
+            continue;
         }
+        remote_address_info.push_back(resolved);
         remote_families.push_back(family);
-        i++;
+        kept_hosts.push_back(remote_host);
+        kept_ports.push_back(args.remote_ports[i]);
+        kept_families.push_back(family);
     }
+    if (remote_address_info.empty()) {
+        std::cerr << "No targets could be resolved." << std::endl;
+        std::exit(EXIT_FAILURE);
+    }
+    this->args.remote_hosts = std::move(kept_hosts);
+    this->args.remote_ports = std::move(kept_ports);
+    this->args.remote_families = std::move(kept_families);
     // Create one socket per IP family in use
     for (const auto *rai : remote_address_info) {
         if (socketFor(rai->ai_family == AF_INET ? IPV4 : IPV6) != nullptr) {
@@ -414,8 +428,8 @@ auto Client::sendPacket(uint32_t idx, size_t payload_len) -> Timestamp
         message.msg_control = nullptr;
         message.msg_controllen = 0;
         if (sendmsg(sock->fd, &message, 0) == -1) {
-            std::cerr << strerror(errno) << std::endl;
-            throw std::runtime_error(std::string("Sending UDP message failed with error."));
+            std::cerr << "WARNING: sending to target failed: " << strerror(errno) << std::endl;
+            continue;
         }
         this->sent_packets += 1;
     }

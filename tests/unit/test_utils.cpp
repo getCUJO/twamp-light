@@ -632,6 +632,41 @@ TEST_F(ParseAddressPortTest, Invalid) {
 }
 
 // ============================================================================
+// Tests for unmapIPv4Mapped()
+// ============================================================================
+
+TEST(UnmapIPv4MappedTest, MappedAddressBecomesIPv4) {
+    std::string ip = "::ffff:127.0.0.1";
+    int family = IPV6;
+    EXPECT_TRUE(unmapIPv4Mapped(ip, family));
+    EXPECT_EQ(ip, "127.0.0.1");
+    EXPECT_EQ(family, IPV4);
+}
+
+TEST(UnmapIPv4MappedTest, HexFormMappedAddressBecomesIPv4) {
+    std::string ip = "::ffff:c000:201";
+    int family = IPV6;
+    EXPECT_TRUE(unmapIPv4Mapped(ip, family));
+    EXPECT_EQ(ip, "192.0.2.1");
+    EXPECT_EQ(family, IPV4);
+}
+
+TEST(UnmapIPv4MappedTest, PlainIPv6IsUntouched) {
+    std::string ip = "::1";
+    int family = IPV6;
+    EXPECT_FALSE(unmapIPv4Mapped(ip, family));
+    EXPECT_EQ(ip, "::1");
+    EXPECT_EQ(family, IPV6);
+}
+
+TEST(UnmapIPv4MappedTest, HostnameIsUntouched) {
+    std::string ip = "localhost";
+    int family = IPV6;
+    EXPECT_FALSE(unmapIPv4Mapped(ip, family));
+    EXPECT_EQ(family, IPV6);
+}
+
+// ============================================================================
 // Main
 // ============================================================================
 

@@ -84,6 +84,10 @@ static auto parse_args(int argc, char **argv) -> Args
             } else if (!parseAddressPort(str, ip, port, family)) {
                 return "Address must be in the format IP:Port";
             }
+            if (family == IPV6) {
+                // IPv4-mapped targets must use the IPv4 socket, as the IPv6 sockets are IPV6_V6ONLY
+                unmapIPv4Mapped(ip, family);
+            }
             args.remote_families.push_back(family);
             args.remote_hosts.push_back(std::move(ip));
             args.remote_ports.push_back(port);

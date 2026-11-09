@@ -435,6 +435,21 @@ auto parseAddressPort(const std::string &input, std::string &ip, uint16_t &port,
     return false;
 }
 
+auto unmapIPv4Mapped(std::string &ip, int &family) -> bool
+{
+    struct in6_addr addr6 {};
+    if (inet_pton(AF_INET6, ip.c_str(), &addr6) != 1 || !IN6_IS_ADDR_V4MAPPED(&addr6)) {
+        return false;
+    }
+    char buf[INET_ADDRSTRLEN];
+    if (inet_ntop(AF_INET, &addr6.s6_addr[12], buf, sizeof(buf)) == nullptr) {
+        return false;
+    }
+    ip = buf;
+    family = IPV4;
+    return true;
+}
+
 auto make_msghdr(
     struct iovec *iov, size_t iov_len, struct sockaddr_in6 *addr, socklen_t addr_len, char *control, size_t control_len)
     -> struct msghdr {

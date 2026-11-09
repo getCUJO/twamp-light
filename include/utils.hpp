@@ -88,6 +88,8 @@ auto htonts(Timestamp ts) -> Timestamp;
 auto parseIPPort(const std::string &input, std::string &ip, uint16_t &port) -> bool;
 auto parseIPv6Port(const std::string &input, std::string &ip, uint16_t &port) -> bool;
 auto parseAddressPort(const std::string &input, std::string &ip, uint16_t &port, int &family) -> bool;
+// Rewrites an IPv4-mapped IPv6 address (::ffff:a.b.c.d) as plain IPv4 and sets family to IPV4
+auto unmapIPv4Mapped(std::string &ip, int &family) -> bool;
 auto make_msghdr(
     struct iovec *iov, size_t iov_len, struct sockaddr_in6 *addr, socklen_t addr_len, char *control, size_t control_len)
     -> struct msghdr;

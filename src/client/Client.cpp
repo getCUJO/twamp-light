@@ -37,6 +37,10 @@ Client::Client(const Args &args) : start_time((uint64_t) time(nullptr)), raw_dat
     std::vector<std::string> kept_hosts;
     std::vector<uint16_t> kept_ports;
     std::vector<int> kept_families;
+    // The local address is resolved once per family. Targets of a family it cannot be resolved for are skipped,
+    // e.g. an IPv4 --local_address cannot be used for IPv6 targets.
+    std::array<struct addrinfo *, 2> local_info{};
+    std::array<int, 2> local_err{};
     for (size_t i = 0; i < args.remote_hosts.size(); i++) {
         const auto &remote_host = args.remote_hosts[i];
         int family = args.ip_version;
@@ -71,6 +75,23 @@ Client::Client(const Args &args) : start_time((uint64_t) time(nullptr)), raw_dat
                       << ", failed to resolve remote socket address: " << gai_strerror(err) << std::endl;
             continue;
         }
+        const size_t fi = family == IPV4 ? 0 : 1;
+        if (local_info[fi] == nullptr && local_err[fi] == 0) {
+            struct addrinfo local_hints {};
+            local_hints.ai_family = hints.ai_family;
+            local_hints.ai_socktype = SOCK_DGRAM;
+            local_hints.ai_flags = AI_PASSIVE | AI_ADDRCONFIG;
+            local_err[fi] = getaddrinfo(args.local_host.empty() ? nullptr : args.local_host.c_str(),
+                                        args.local_port.c_str(),
+                                        &local_hints,
+                                        &local_info[fi]);
+        }
+        if (local_err[fi] != 0) {
+            std::cerr << "WARNING: skipping target " << remote_host << ":" << port
+                      << ", failed to resolve local socket address: " << gai_strerror(local_err[fi]) << std::endl;
+            freeaddrinfo(resolved);
+            continue;
+        }
         remote_address_info.push_back(resolved);
         remote_families.push_back(family);
         kept_hosts.push_back(remote_host);
@@ -92,18 +113,9 @@ Client::Client(const Args &args) : start_time((uint64_t) time(nullptr)), raw_dat
         }
         ClientSocket sock;
         sock.family = rai->ai_family == AF_INET ? IPV4 : IPV6;
-        struct addrinfo hints {};
-        hints.ai_family = rai->ai_family;
-        hints.ai_socktype = SOCK_DGRAM;
-        hints.ai_flags = AI_PASSIVE | AI_ADDRCONFIG;
-        int err2 = getaddrinfo(args.local_host.empty() ? nullptr : args.local_host.c_str(),
-                               args.local_port.c_str(),
-                               &hints,
-                               &sock.local_address_info);
-        if (err2 != 0) {
-            std::cerr << "failed to resolve local socket address: " << err2;
-            std::exit(EXIT_FAILURE);
-        }
+        const size_t fi = sock.family == IPV4 ? 0 : 1;
+        sock.local_address_info = local_info[fi];
+        local_info[fi] = nullptr;
         sockets.push_back(sock);
         ClientSocket &stored = sockets.back();
         stored.fd = socket(rai->ai_family, rai->ai_socktype, rai->ai_protocol);

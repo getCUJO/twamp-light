@@ -97,3 +97,18 @@ awk -F, 'NR>1 && $2!="127.0.0.1" && $2!="::1" {print "IP mismatch on line", NR; 
          NR>1 && $2=="127.0.0.1" {v4++} NR>1 && $2=="::1" {v6++}
          END {if (v4!=10 || v6!=10) {print "Mixed sample count mismatch", v4, v6; exit 1}}' client_output.txt
 awk -F, 'NR>1 && ($8!=255 || $9!=255 || $11!=184 || $12!=40) {print "Reflected hop limit or traffic class mismatch on line", NR; exit 1}' client_output.txt
+
+# A local address of one family skips the targets of the other family instead of aborting
+stdbuf -o0 ./twamp-light-server -n 10 --ip 4 -P 4200 -T 40 &>server_output_v4.txt &
+server_pid=$!
+sleep 1
+stdbuf -o0 ./twamp-light-client -i 10 -n 10 -T 184 -a 127.0.0.1 127.0.0.1:4200 ::1:4201 &>client_output.txt &
+client_pid=$!
+wait $client_pid
+client_pid=""
+wait $server_pid
+server_pid=""
+
+grep -q "skipping target ::1:4201" client_output.txt || { echo "Missing skip warning for the IPv6 target"; exit 1; }
+awk -F, 'NR>1 && NF==17 && $2=="127.0.0.1" {v4++} NR>1 && NF==17 && $2=="::1" {v6++}
+         END {if (v4!=10 || v6!=0) {print "Local address sample count mismatch", v4, v6; exit 1}}' client_output.txt

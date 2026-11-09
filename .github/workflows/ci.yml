@@ -27,5 +27,5 @@ jobs:
       - name: Build
         run: cmake --build build -j"$(nproc)"
       - name: Test
-        # Unit tests only for now: the shell/valgrind integration tests are slow and simple_qoo_test gets a NaN standard deviation on the runner
+        # Unit tests only for now: the shell/valgrind integration tests are slow and simple_qoo_test fails with cmocka 2.0 (Ubuntu 26.04): qoo-c's variance is slightly negative, so the standard deviation is NaN
         run: ctest --test-dir build --output-on-failure -R '^(test_utils|test_packets|test_packetlist)$'

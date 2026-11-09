@@ -8,6 +8,8 @@ CMake reads this at build time via `cmake/getversion.cmake` — no other files n
 
 ## Release Workflow
 
+`./release.sh <version>` performs steps 1-6 below and stops after opening the PR. Step 7 is done by hand after review.
+
 Features and fixes are merged to `main` via PRs as normal. When ready to release:
 
 ```bash

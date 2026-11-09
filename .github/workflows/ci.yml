@@ -27,5 +27,4 @@ jobs:
       - name: Build
         run: cmake --build build -j"$(nproc)"
       - name: Test
-        # simple_qoo_test needs a data file that the qoo-c commit pinned on main does not provide
-        run: ctest --test-dir build --output-on-failure -E simple_qoo_test
+        run: ctest --test-dir build --output-on-failure

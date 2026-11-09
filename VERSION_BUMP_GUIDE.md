@@ -25,15 +25,20 @@ git add VERSION.txt
 git commit -m "chore: bump version to $version"
 git tag "v$version"
 
-# 4. Push and open a PR to merge back into main
+# 4. Push the branch and tag
 git push origin release/v$version
 git push origin v$version
 
 # 5. Create a GitHub release:
 gh release create "v$version" --title "v$version" --generate-notes
+
+# 6. Open a PR to merge back into main
+gh pr create --base main --title "chore: bump version to $version" --body ""
 ```
 
-6. Merge the PR into `main`.
+7. Merge the PR into `main` using a **merge commit** (not squash or rebase). The
+   release tag points at the commit on the release branch, and squashing or
+   rebasing would leave that commit, and so the tag, outside `main`'s history.
 
 ```
 main: ── feature PRs ── fix PRs ──────────────── merge PR ───▶

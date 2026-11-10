@@ -1,0 +1,65 @@
+name: release-debs
+
+# Builds the amd64 Debian package and attaches it to the GitHub release.
+# Runs only when a release is published (`gh release create`), not on every push.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag to build and attach the package to (e.g. v1.4.4)
+        required: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-debs-${{ inputs.tag || github.event.release.tag_name }}
+
+jobs:
+  deb-amd64:
+    runs-on: ubuntu-latest
+    # Build on Debian 12 so the package also runs on older systems.
+    container: debian:bookworm
+    timeout-minutes: 30
+    env:
+      TAG: ${{ inputs.tag || github.event.release.tag_name }}
+    steps:
+      - name: Install build dependencies
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends ca-certificates git gh cmake make g++
+          # The workspace is owned by the runner user, not root; cmake runs git describe in it.
+          git config --global --add safe.directory '*'
+
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.TAG }}
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Check tag matches VERSION.txt
+        run: |
+          version="$(cat VERSION.txt)"
+          if [ "${TAG#v}" != "$version" ]; then
+            echo "::error::Tag $TAG does not match VERSION.txt ($version)"
+            exit 1
+          fi
+
+      - name: Build
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DRUN_TESTS=OFF
+          cmake --build build -j"$(nproc)"
+
+      - name: Package
+        run: |
+          cd build
+          ../debian/make-deb-pkg.sh "${TAG#v}"
+
+      - name: Attach to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "$TAG" "build/twamp-light-${TAG#v}.deb" \
+            --clobber --repo "$GITHUB_REPOSITORY"

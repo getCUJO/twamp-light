@@ -1,13 +1,14 @@
 # Twamp Light
 
-## Installing a release version (v1.3.6 in the example)
-Tested on a clean Ubuntu 22.04 VM on AWS and a Ubuntu 22.04 docker image
+## Installing a release version (v1.4.4 in the example)
+Each [release](https://github.com/getCUJO/twamp-light/releases) has an amd64
+(x86_64) Debian package.
 
 ```bash
 apt update
 apt install wget
-wget https://github.com/domoslabs/twamp-light/releases/download/v1.3.6/twamp-light-1.3.6.deb
-apt install ./twamp-light-1.3.6.deb
+wget https://github.com/getCUJO/twamp-light/releases/download/v1.4.4/twamp-light-1.4.4.deb
+apt install ./twamp-light-1.4.4.deb
 ```
 
 ## Build instructions

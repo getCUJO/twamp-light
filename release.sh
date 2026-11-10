@@ -1,7 +1,7 @@
 #!/bin/bash
 # Creates a release following VERSION_BUMP_GUIDE.md, up to and including opening the PR
 
-USAGE="$0 [--dry-run] VERSION
+USAGE="$0 [--dry-run] [--yes] VERSION
 
 Creates a release branch, tag, GitHub release and a pull request for the version bump.
 
@@ -16,6 +16,7 @@ This script will:
  * ask for confirmation, then push the branch and the tag
  * create the GitHub release and open a pull request to main
 Merging the PR into main with a merge commit is left to a person after review.
+With --yes the confirmation prompts are skipped (used by the Release workflow).
 With --dry-run only the checks run and the PR preview is shown (fetching is the
 only side effect); no branch, commit, tag, push, release or PR is created.
 Set VERBOSE=1 to trace the commands.
@@ -24,11 +25,13 @@ Set ALLOW_OPEN_RELEASE_PRS=1 to proceed even though release PRs are open.
 set -eEuo pipefail
 
 dry_run=""
+assume_yes=""
 args=()
 for arg in "$@"; do
     case "$arg" in
         --help) echo "$USAGE"; exit 101 ;;
         --dry-run) dry_run=1 ;;
+        --yes) assume_yes=1 ;;
         *) args+=("$arg") ;;
     esac
 done
@@ -101,6 +104,11 @@ step() {
 
 prompt_yes_no() {
     local prompt="${1:-do you want to continue?}"
+    if [[ -n "$assume_yes" ]]; then
+        printf "(release) %s [y/n] y (--yes)\n" "$prompt"
+        REPLY=y
+        return
+    fi
     REPLY=
     while [ "$REPLY" != "y" ] && [ "$REPLY" != "n" ]; do
         printf "(release) %s [y/n] " "$prompt"
@@ -208,6 +216,13 @@ else
     echo "    (empty)"
 fi
 echo "  Files: VERSION.txt ($(git show origin/main:VERSION.txt) -> $version)"
+if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
+    {
+        echo "### ${dry_run:+Dry run: }$pr_title"
+        echo ""
+        echo "$pr_body"
+    } >> "$GITHUB_STEP_SUMMARY"
+fi
 if [[ -z "$dry_run" ]]; then
     prompt_yes_no "Does the PR look ok? Nothing has been created yet; continuing creates the branch, tag and release."
     if [ "$REPLY" != "y" ]; then

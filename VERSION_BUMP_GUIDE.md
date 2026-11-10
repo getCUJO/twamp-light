@@ -33,9 +33,6 @@ git push origin v$version
 gh release create "v$version" --title "v$version" --generate-notes
 ```
 
-Publishing the release runs the `release-debs` workflow, which attaches the
-amd64 `.deb` package to it.
-
 6. Merge the PR into `main`.
 
 ```

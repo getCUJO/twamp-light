@@ -14,7 +14,9 @@ Features and fixes are merged to `main` via PRs as normal. When ready to release
    enter the version (e.g. `1.4.4`). Tick **dry run** first to only run the
    checks and see the PR description in the run summary.
 2. The workflow runs `release.sh`, which:
-   - stops if a release PR (`release/*`) is still open, or if the tag or branch exists
+   - stops if a release PR (`release/*`) is still open, or if the tag or branch
+     exists. Tick **Release even if a release PR is still open** to override
+     the first check.
    - creates `release/v<version>` from `main` and commits the `VERSION.txt` bump
    - tags it `v<version>` and pushes the branch and tag
    - creates the GitHub release with generated notes
@@ -41,8 +43,10 @@ opens, since the PR only changes `VERSION.txt`.
 
 `./release.sh <version>` does step 2 from your machine, asking for
 confirmation before creating the branch, the tag and pushing. Use
-`./release.sh --dry-run <version>` to only run the checks. Publishing the
-release from your machine triggers `release-debs` on its own.
+`./release.sh --dry-run <version>` to only run the checks, and
+`ALLOW_OPEN_RELEASE_PRS=1 ./release.sh <version>` to release while a release PR
+is open. Publishing the release from your machine triggers `release-debs` on
+its own.
 
 ## Conventions
 

@@ -13,6 +13,10 @@ on:
         description: Only run the checks and show the PR preview; create nothing
         type: boolean
         default: false
+      allow_open_release_prs:
+        description: Release even if a release PR is still open
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -31,6 +35,7 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       VERSION: ${{ inputs.version }}
+      ALLOW_OPEN_RELEASE_PRS: ${{ inputs.allow_open_release_prs && '1' || '' }}
     steps:
       - uses: actions/checkout@v7
         with:

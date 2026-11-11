@@ -8,6 +8,7 @@ Makefile
 CMakeFiles
 cmake-build-debug/
 build
+build-arm64
 packages
 .vscode/
 .cache/

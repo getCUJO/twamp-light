@@ -48,7 +48,8 @@ static auto parse_args(int argc, char **argv) -> Args
                    "which format to print the output in. Can be 'legacy', 'raw', 'clockcorrected'")
         ->default_str(args.print_format);
     app.add_option("--sep", args.sep, "The separator to use in the output.");
-    app.add_option("--ip", args.ip_version, "The IP version to use.");
+    app.add_option("--ip", args.ip_version, "Force IP version 4 or 6 for all addresses. By default the version is detected per address.")
+        ->check(CLI::IsMember({0, IPV4, IPV6}));
     app.add_option(
         "--runtime",
         args.runtime,
@@ -71,6 +72,7 @@ static auto parse_args(int argc, char **argv) -> Args
         ->check([&args](const std::string &str) {
             std::string ip;
             uint16_t port = 0;
+            int family = args.ip_version;
             if (args.ip_version == IPV6) {
                 if (!parseIPv6Port(str, ip, port)) {
                     return "Address must be in the format IP:Port";
@@ -79,7 +81,14 @@ static auto parse_args(int argc, char **argv) -> Args
                 if (!parseIPPort(str, ip, port)) {
                     return "Address must be in the format IP:Port";
                 }
+            } else if (!parseAddressPort(str, ip, port, family)) {
+                return "Address must be in the format IP:Port";
             }
+            if (family == IPV6) {
+                // IPv4-mapped targets must use the IPv4 socket, as the IPv6 sockets are IPV6_V6ONLY
+                unmapIPv4Mapped(ip, family);
+            }
+            args.remote_families.push_back(family);
             args.remote_hosts.push_back(std::move(ip));
             args.remote_ports.push_back(port);
             return "";
@@ -138,6 +147,10 @@ auto main(int argc, char **argv) -> int
         }
         if (!args.json_output_file.empty() && args.print_format != "legacy") {
             client.JsonLog(args.json_output_file);
+        }
+        if (packets_sent == 0) {
+            std::cerr << "No packets could be sent to any target." << std::endl;
+            return EXIT_FAILURE;
         }
         return 0;
     } catch (const CLI::BadNameString &e) {

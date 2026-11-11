@@ -17,6 +17,8 @@
 #include <sys/time.h>
 #include <time.h>
 #include "cstdlib"
+#include <algorithm>
+#include <arpa/inet.h>
 #include <cmath>
 #include <cstdint>
 
@@ -407,6 +409,45 @@ auto parseIPv6Port(const std::string &input, std::string &ip, uint16_t &port) ->
     }
 
     return false;
+}
+
+// Detects the family per address: more than one colon means IPv6 (unbracketed v6addr:port),
+// exactly one colon means IPv4:port (or hostname:port, resolved as IPv4 as before).
+auto parseAddressPort(const std::string &input, std::string &ip, uint16_t &port, int &family) -> bool
+{
+    auto colons = std::count(input.begin(), input.end(), ':');
+    if (colons == 1) {
+        family = IPV4;
+        return parseIPPort(input, ip, port);
+    }
+    if (colons > 1) {
+        std::string host;
+        uint16_t tmp_port = 0;
+        struct in6_addr addr6 {};
+        if (!parseIPv6Port(input, host, tmp_port) || inet_pton(AF_INET6, host.c_str(), &addr6) != 1) {
+            return false;
+        }
+        ip = std::move(host);
+        port = tmp_port;
+        family = IPV6;
+        return true;
+    }
+    return false;
+}
+
+auto unmapIPv4Mapped(std::string &ip, int &family) -> bool
+{
+    struct in6_addr addr6 {};
+    if (inet_pton(AF_INET6, ip.c_str(), &addr6) != 1 || !IN6_IS_ADDR_V4MAPPED(&addr6)) {
+        return false;
+    }
+    char buf[INET_ADDRSTRLEN];
+    if (inet_ntop(AF_INET, &addr6.s6_addr[12], buf, sizeof(buf)) == nullptr) {
+        return false;
+    }
+    ip = buf;
+    family = IPV4;
+    return true;
 }
 
 auto make_msghdr(

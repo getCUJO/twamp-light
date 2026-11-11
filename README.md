@@ -47,6 +47,13 @@ The packets are formatted according to [RFC5357](https://datatracker.ietf.org/do
 If time synchronization is enabled (default behaviour, see help for how to disable), the timestamp field (64bit) will be split into timestamp (32bit)+timesync data (32bit),
 which breaks the protocol and therefore becomes incompatible with other TWAMP Light implementations.
 
+### IPv6 support
+- The client accepts IPv4 and IPv6 targets in the same invocation, e.g. `./twamp-light-client 192.0.2.1:4200 2001:db8::1:4200`. The IP version is detected per address. `--ip 4` or `--ip 6` forces one version for all addresses.
+- The client uses one socket per IP family. The IPv6 socket is IPv6-only (`IPV6_V6ONLY`), so both sockets can share a fixed local port (`-P`).
+- IPv4-mapped targets (`::ffff:a.b.c.d`) are sent as plain IPv4 on the IPv4 socket, and the output shows the IPv4 address.
+- A target that cannot be resolved is skipped with a warning, and a failed send to one target does not stop the others. The client exits with an error only if no target could be resolved or no packet could be sent.
+- The server's IP version is selected with `--ip` (see `./twamp-light-server -h`).
+
 ### Sampling
 All the arguments that take in multiple values, such as payload size and delay, 
 are sampled uniformly using Marsenne Twister when the client crafts a packet.

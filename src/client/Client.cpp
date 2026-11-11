@@ -16,6 +16,7 @@
 #include <iostream>
 #include <memory>
 #include <netdb.h>
+#include <poll.h>
 #include <sys/types.h>
 #include <unistd.h>
 
@@ -32,24 +33,33 @@ using Clock = std::chrono::system_clock;
 
 Client::Client(const Args &args) : start_time((uint64_t) time(nullptr)), raw_data_list(), args(args)
 {
-    // Construct remote socket address
-    struct addrinfo hints {};
-    memset(&hints, 0, sizeof(hints));
-    if (args.ip_version == IPV4) {
-        hints.ai_family = AF_INET;
-    } else if (args.ip_version == IPV6) {
-        hints.ai_family = AF_INET6;
-    } else {
-        std::cerr << "Invalid IP version." << std::endl;
-        std::exit(EXIT_FAILURE);
-    }
-    hints.ai_socktype = SOCK_DGRAM;
-    hints.ai_protocol = 0;
-    hints.ai_flags = AI_PASSIVE | AI_ADDRCONFIG;
-    // Resize the remote_address_info vector based on the number of remote hosts
-    remote_address_info.resize(args.remote_hosts.size());
-    size_t i = 0;
-    for (const auto &remote_host : args.remote_hosts) {
+    // Targets that cannot be resolved are skipped with a warning, so the remaining ones are still measured
+    std::vector<std::string> kept_hosts;
+    std::vector<uint16_t> kept_ports;
+    std::vector<int> kept_families;
+    // The local address is resolved once per family. Targets of a family it cannot be resolved for are skipped,
+    // e.g. an IPv4 --local_address cannot be used for IPv6 targets.
+    std::array<struct addrinfo *, 2> local_info{};
+    std::array<int, 2> local_err{};
+    for (size_t i = 0; i < args.remote_hosts.size(); i++) {
+        const auto &remote_host = args.remote_hosts[i];
+        int family = args.ip_version;
+        if (i < args.remote_families.size()) {
+            family = args.remote_families[i];
+        }
+        struct addrinfo hints {};
+        memset(&hints, 0, sizeof(hints));
+        if (family == IPV4) {
+            hints.ai_family = AF_INET;
+        } else if (family == IPV6) {
+            hints.ai_family = AF_INET6;
+        } else {
+            std::cerr << "Invalid IP version." << std::endl;
+            std::exit(EXIT_FAILURE);
+        }
+        hints.ai_socktype = SOCK_DGRAM;
+        hints.ai_protocol = 0;
+        hints.ai_flags = AI_PASSIVE;
         std::string port;
         try {
             // Convert port number to string
@@ -58,48 +68,92 @@ Client::Client(const Args &args) : start_time((uint64_t) time(nullptr)), raw_dat
             std::cerr << "Not enough remote ports provided" << std::endl;
             std::exit(EXIT_FAILURE);
         }
-        int err = getaddrinfo(remote_host.c_str(), port.c_str(), &hints, &remote_address_info[i]);
+        struct addrinfo *resolved = nullptr;
+        int err = getaddrinfo(remote_host.c_str(), port.c_str(), &hints, &resolved);
         if (err != 0) {
-            std::cerr << "failed to resolve remote socket address: " << err;
-            std::exit(EXIT_FAILURE);
+            std::cerr << "WARNING: skipping target " << remote_host << ":" << port
+                      << ", failed to resolve remote socket address: " << gai_strerror(err) << std::endl;
+            continue;
         }
-        i++;
+        const size_t fi = family == IPV4 ? 0 : 1;
+        if (local_info[fi] == nullptr && local_err[fi] == 0) {
+            struct addrinfo local_hints {};
+            local_hints.ai_family = hints.ai_family;
+            local_hints.ai_socktype = SOCK_DGRAM;
+            local_hints.ai_flags = AI_PASSIVE | AI_ADDRCONFIG;
+            local_err[fi] = getaddrinfo(args.local_host.empty() ? nullptr : args.local_host.c_str(),
+                                        args.local_port.c_str(),
+                                        &local_hints,
+                                        &local_info[fi]);
+        }
+        if (local_err[fi] != 0) {
+            std::cerr << "WARNING: skipping target " << remote_host << ":" << port
+                      << ", failed to resolve local socket address: " << gai_strerror(local_err[fi]) << std::endl;
+            freeaddrinfo(resolved);
+            continue;
+        }
+        remote_address_info.push_back(resolved);
+        remote_families.push_back(family);
+        kept_hosts.push_back(remote_host);
+        kept_ports.push_back(args.remote_ports[i]);
+        kept_families.push_back(family);
     }
-    int err2 = getaddrinfo(args.local_host.empty() ? nullptr : args.local_host.c_str(),
-                           args.local_port.c_str(),
-                           &hints,
-                           &local_address_info);
-    if (err2 != 0) {
-        std::cerr << "failed to resolve local socket address: " << err2;
+    if (remote_address_info.empty()) {
+        std::cerr << "No targets could be resolved." << std::endl;
         std::exit(EXIT_FAILURE);
     }
-    // Create the socket
-    fd = socket(remote_address_info[0]->ai_family,
-                remote_address_info[0]->ai_socktype,
-                remote_address_info[0]->ai_protocol);
-    if (fd == -1) {
-        std::cerr << strerror(errno) << std::endl;
-        throw std::runtime_error("Failed to create socket: " + std::string(strerror(errno)));
-    }
-    // Setup the socket options, to be able to receive TTL and TOS
-    set_socket_options(fd, HDR_TTL, args.timeout, remote_address_info[0]->ai_family);
-    set_socket_tos(fd, args.snd_tos, remote_address_info[0]->ai_family);
-    // Bind the socket to a local port
-    if (bind(fd, local_address_info->ai_addr, local_address_info->ai_addrlen) == -1) {
-        std::cerr << strerror(errno) << std::endl;
-        throw std::runtime_error("Failed to bind socket: " + std::string(strerror(errno)));
-    }
-    // Query the actual bound port (important when binding to port 0)
-    struct sockaddr_storage bound_addr {};
-    socklen_t bound_addr_len = sizeof(bound_addr);
-    if (getsockname(fd, reinterpret_cast<struct sockaddr *>(&bound_addr), &bound_addr_len) == 0) {
-        uint16_t actual_port = 0;
-        if (args.ip_version == IPV4) {
-            actual_port = ntohs(reinterpret_cast<struct sockaddr_in *>(&bound_addr)->sin_port);
-        } else {
-            actual_port = ntohs(reinterpret_cast<struct sockaddr_in6 *>(&bound_addr)->sin6_port);
+    last_send_errno.assign(remote_address_info.size(), 0);
+    this->args.remote_hosts = std::move(kept_hosts);
+    this->args.remote_ports = std::move(kept_ports);
+    this->args.remote_families = std::move(kept_families);
+    // Create one socket per IP family in use
+    for (const auto *rai : remote_address_info) {
+        if (socketFor(rai->ai_family == AF_INET ? IPV4 : IPV6) != nullptr) {
+            continue;
         }
-        this->args.local_port = std::to_string(actual_port);
+        ClientSocket sock;
+        sock.family = rai->ai_family == AF_INET ? IPV4 : IPV6;
+        const size_t fi = sock.family == IPV4 ? 0 : 1;
+        sock.local_address_info = local_info[fi];
+        local_info[fi] = nullptr;
+        sockets.push_back(sock);
+        ClientSocket &stored = sockets.back();
+        stored.fd = socket(rai->ai_family, rai->ai_socktype, rai->ai_protocol);
+        if (stored.fd == -1) {
+            std::cerr << strerror(errno) << std::endl;
+            throw std::runtime_error("Failed to create socket: " + std::string(strerror(errno)));
+        }
+        // Setup the socket options, to be able to receive TTL and TOS
+        set_socket_options(stored.fd, HDR_TTL, args.timeout, rai->ai_family);
+        set_socket_tos(stored.fd, args.snd_tos, rai->ai_family);
+        if (stored.family == IPV6) {
+            // Keep the families separate so both sockets can share a fixed local port
+            int v6only = 1;
+            if (setsockopt(stored.fd, IPPROTO_IPV6, IPV6_V6ONLY, &v6only, sizeof(v6only)) != 0) {
+                std::cerr << "[PROBLEM] Cannot set IPV6_V6ONLY." << std::endl;
+            }
+        }
+        // Bind the socket to a local port
+        if (bind(stored.fd, stored.local_address_info->ai_addr, stored.local_address_info->ai_addrlen) == -1) {
+            std::cerr << strerror(errno) << std::endl;
+            throw std::runtime_error("Failed to bind socket: " + std::string(strerror(errno)));
+        }
+        // Query the actual bound port (important when binding to port 0)
+        struct sockaddr_storage bound_addr {};
+        socklen_t bound_addr_len = sizeof(bound_addr);
+        stored.local_port = args.local_port;
+        if (getsockname(stored.fd, reinterpret_cast<struct sockaddr *>(&bound_addr), &bound_addr_len) == 0) {
+            uint16_t actual_port = 0;
+            if (stored.family == IPV4) {
+                actual_port = ntohs(reinterpret_cast<struct sockaddr_in *>(&bound_addr)->sin_port);
+            } else {
+                actual_port = ntohs(reinterpret_cast<struct sockaddr_in6 *>(&bound_addr)->sin6_port);
+            }
+            stored.local_port = std::to_string(actual_port);
+        }
+        if (sockets.size() == 1) {
+            this->args.local_port = stored.local_port;
+        }
     }
     // Initialize the stats
     stats_RTT = sqa_stats_create();
@@ -135,12 +189,24 @@ Client::~Client()
             freeaddrinfo(addrinfo);
         }
     }
-    if (local_address_info != nullptr) {
-        freeaddrinfo(local_address_info);
+    for (auto &sock : sockets) {
+        if (sock.local_address_info != nullptr) {
+            freeaddrinfo(sock.local_address_info);
+        }
+        if (sock.fd != -1) {
+            close(sock.fd);
+        }
     }
-    if (fd != -1) {
-        close(fd);
+}
+
+auto Client::socketFor(int family) -> ClientSocket *
+{
+    for (auto &sock : sockets) {
+        if (sock.family == family) {
+            return &sock;
+        }
     }
+    return nullptr;
 }
 
 /* The packet generation function */
@@ -365,7 +431,9 @@ auto Client::sendPacket(uint32_t idx, size_t payload_len) -> Timestamp
     std::array<struct iovec, 1> iov{};
     iov[0].iov_base = &senderPacket;
     iov[0].iov_len = payload_len;
-    for (const auto &rai : remote_address_info) {
+    for (size_t i = 0; i < remote_address_info.size(); i++) {
+        const auto *rai = remote_address_info[i];
+        ClientSocket *sock = socketFor(rai->ai_family == AF_INET ? IPV4 : IPV6);
         struct msghdr message = {};
         message.msg_name = rai->ai_addr;
         message.msg_namelen = rai->ai_addrlen;
@@ -373,10 +441,15 @@ auto Client::sendPacket(uint32_t idx, size_t payload_len) -> Timestamp
         message.msg_iovlen = 1;
         message.msg_control = nullptr;
         message.msg_controllen = 0;
-        if (sendmsg(fd, &message, 0) == -1) {
-            std::cerr << strerror(errno) << std::endl;
-            throw std::runtime_error(std::string("Sending UDP message failed with error."));
+        if (sendmsg(sock->fd, &message, 0) == -1) {
+            if (last_send_errno[i] != errno) {
+                last_send_errno[i] = errno;
+                std::cerr << "WARNING: sending to " << args.remote_hosts[i] << ":" << args.remote_ports[i]
+                          << " failed: " << strerror(errno) << std::endl;
+            }
+            continue;
         }
+        last_send_errno[i] = 0;
         this->sent_packets += 1;
     }
     return ntohts(senderPacket.timestamp);
@@ -395,35 +468,51 @@ auto Client::craftSenderPacket(uint32_t idx) -> ClientPacket
 
 auto Client::awaitAndHandleResponse() -> bool
 {
-    // Read incoming datagram
-    std::array<char, sizeof(ReflectorPacket)> buffer{}; // We should only be receiving ReflectorPackets
-    std::array<char, 2048> control{};
-    struct sockaddr_in6 src_addr {};
+    std::vector<struct pollfd> pfds;
+    pfds.reserve(sockets.size());
+    for (const auto &sock : sockets) {
+        pfds.push_back({sock.fd, POLLIN, 0});
+    }
+    // Wake up after the timeout so the caller can process timed out packets
+    int timeout_ms = args.timeout != 0 ? static_cast<int>(args.timeout) * static_cast<int>(MILLISECONDS_IN_SECOND) : -1;
+    if (poll(pfds.data(), pfds.size(), timeout_ms) <= 0) {
+        return false;
+    }
+    for (size_t k = 0; k < pfds.size(); k++) {
+        if ((pfds[k].revents & POLLIN) == 0) {
+            continue;
+        }
+        // Read incoming datagram
+        std::array<char, sizeof(ReflectorPacket)> buffer{}; // We should only be receiving ReflectorPackets
+        std::array<char, 2048> control{};
+        struct sockaddr_in6 src_addr {};
 
-    struct iovec iov {};
-    iov.iov_base = buffer.data();
-    iov.iov_len = sizeof(buffer);
+        struct iovec iov {};
+        iov.iov_base = buffer.data();
+        iov.iov_len = sizeof(buffer);
 
-    timespec incoming_timestamp = {0, 0};
-    timespec *incoming_timestamp_ptr = &incoming_timestamp;
+        timespec incoming_timestamp = {0, 0};
+        timespec *incoming_timestamp_ptr = &incoming_timestamp;
 
-    struct msghdr incoming_msg = make_msghdr(&iov, 1, &src_addr, sizeof(src_addr), control.data(), sizeof(control));
+        struct msghdr incoming_msg =
+            make_msghdr(&iov, 1, &src_addr, sizeof(src_addr), control.data(), sizeof(control));
 
-    ssize_t count = recvmsg(fd, &incoming_msg, MSG_WAITALL);
+        ssize_t count = recvmsg(sockets[k].fd, &incoming_msg, MSG_DONTWAIT);
 #ifdef KERNEL_TIMESTAMP_DISABLED_IN_CLIENT
 #else
-    get_kernel_timestamp(incoming_msg, incoming_timestamp_ptr);
+        get_kernel_timestamp(incoming_msg, incoming_timestamp_ptr);
 #endif
-    if (count == -1) {
-        //std::cerr << strerror(errno) << std::endl;
-        return false;
+        if (count == -1) {
+            continue;
+        }
+        if ((incoming_msg.msg_flags & MSG_TRUNC) != 0) {
+            continue;
+        }
+        auto *rec = static_cast<ReflectorPacket *>(static_cast<void *>(buffer.data()));
+        handleReflectorPacket(rec, sockets[k], incoming_msg, count, incoming_timestamp_ptr);
+        return true;
     }
-    if ((incoming_msg.msg_flags & MSG_TRUNC) != 0) {
-        return false;
-    }
-    auto *rec = static_cast<ReflectorPacket *>(static_cast<void *>(buffer.data()));
-    handleReflectorPacket(rec, incoming_msg, count, incoming_timestamp_ptr);
-    return true;
+    return false;
 }
 
 struct TimeData {
@@ -508,6 +597,7 @@ void Client::enqueue_observation(const std::shared_ptr<QEDObservation> &obs)
 }
 
 void Client::handleReflectorPacket(ReflectorPacket *reflectorPacket,
+                                   const ClientSocket &sock,
                                    msghdr msghdr,
                                    ssize_t payload_len,
                                    timespec *incoming_timestamp)
@@ -557,6 +647,7 @@ void Client::handleReflectorPacket(ReflectorPacket *reflectorPacket,
     }
     if (args.print_format == "legacy") {
         printReflectorPacket(reflectorPacket,
+                             sock,
                              msghdr,
                              payload_len,
                              incoming_timestamp_nanoseconds,
@@ -565,6 +656,7 @@ void Client::handleReflectorPacket(ReflectorPacket *reflectorPacket,
 }
 
 void Client::printReflectorPacket(ReflectorPacket *reflectorPacket,
+                                  const ClientSocket &sock,
                                   msghdr msghdr,
                                   ssize_t payload_len,
                                   uint64_t incoming_timestamp_nanoseconds,
@@ -574,15 +666,15 @@ void Client::printReflectorPacket(ReflectorPacket *reflectorPacket,
     IPHeader ipHeader = get_ip_header(msghdr);
     std::array<char, INET6_ADDRSTRLEN> host = {};
     uint16_t port = 0;
-    parse_ip_address(msghdr, &port, host.data(), args.ip_version);
+    parse_ip_address(msghdr, &port, host.data(), sock.family);
     uint16_t local_port = 0;
     try {
-        local_port = static_cast<uint16_t>(std::stoi(args.local_port));
+        local_port = static_cast<uint16_t>(std::stoi(sock.local_port));
     } catch (const std::invalid_argument &e) {
-        std::cerr << "Invalid local port: " << args.local_port << std::endl;
+        std::cerr << "Invalid local port: " << sock.local_port << std::endl;
         std::exit(EXIT_FAILURE);
     } catch (const std::out_of_range &e) {
-        std::cerr << "Local port out of range: " << args.local_port << std::endl;
+        std::cerr << "Local port out of range: " << sock.local_port << std::endl;
         std::exit(EXIT_FAILURE);
     }
     TimeData timeData = computeTimeData(client_receive_time, reflectorPacket);

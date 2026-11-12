@@ -1,0 +1,56 @@
+name: release
+
+# "Run workflow" button in the Actions tab that makes a new release with
+# release.sh: release branch, VERSION.txt bump, tag, GitHub release and the PR
+# back to main. Merging that PR (with a merge commit) is left to a person.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to release, MAJOR.MINOR.PATCH (e.g. 1.4.4)
+        required: true
+      dry_run:
+        description: Only run the checks and show the PR preview; create nothing
+        type: boolean
+        default: false
+      allow_open_release_prs:
+        description: Release even if a release PR is still open
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+      VERSION: ${{ inputs.version }}
+      ALLOW_OPEN_RELEASE_PRS: ${{ inputs.allow_open_release_prs && '1' || '' }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Configure git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Release
+        run: ./release.sh --yes ${{ inputs.dry_run && '--dry-run' || '' }} "$VERSION"
+
+      # A release created with GITHUB_TOKEN does not trigger other workflows, so
+      # start the package build explicitly.
+      - name: Build release packages
+        if: ${{ !inputs.dry_run }}
+        run: gh workflow run release-debs.yml --ref main -f tag="v$VERSION"
